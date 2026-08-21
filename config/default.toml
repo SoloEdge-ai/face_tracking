@@ -20,3 +20,9 @@ port = 8080
 stale_after_ms = 500
 offline_after_ms = 3000
 
+[detector]
+model_path = "models/yolov8n-face-lindevs.pt"
+inference_hz = 5
+image_size = 640
+confidence = 0.50
+iou = 0.45

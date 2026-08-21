@@ -13,6 +13,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
+from .detection_protocol import decode_detection, encode_detection
 from .frame_store import LatestFrameStore
 from .protocol import ProtocolError, decode_frame_metadata
 from .settings import Settings, load_settings
@@ -65,6 +66,21 @@ def create_app(store: LatestFrameStore, *, frontend_dir: Path | None = None) -> 
             while True:
                 await websocket.send_json(store.status())
                 await asyncio.sleep(1)
+        except WebSocketDisconnect:
+            return
+
+    @app.websocket("/ws/detections")
+    async def detection_socket(websocket: WebSocket) -> None:
+        await websocket.accept()
+        last_key: tuple[str, int] | None = None
+        try:
+            while True:
+                detection = await asyncio.to_thread(store.wait_for_detection_after, last_key, 1.0)
+                if detection is None:
+                    await websocket.send_json({"boxes": []})
+                    continue
+                last_key = (detection.source_instance_id, detection.sequence)
+                await websocket.send_json(json.loads(encode_detection(detection)))
         except WebSocketDisconnect:
             return
 
@@ -121,9 +137,24 @@ class ZenohHmiSubscriber:
             status_subscriber = session.declare_subscriber(
                 self._settings.camera_status_key, on_status
             )
+
+            def on_detection(sample: object) -> None:
+                try:
+                    self._store.update_detection(
+                        decode_detection(bytes(getattr(sample, "payload")))
+                    )
+                except (ProtocolError, TypeError, ValueError):
+                    self._store.reject_invalid_frame()
+
+            detection_subscriber = session.declare_subscriber(
+                self._settings.detections_key, on_detection
+            )
             try:
                 self._stop.wait()
             finally:
+                close = getattr(detection_subscriber, "undeclare", None)
+                if callable(close):
+                    close()
                 close = getattr(status_subscriber, "undeclare", None)
                 if callable(close):
                     close()

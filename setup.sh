@@ -12,6 +12,7 @@ python3 -m venv --system-site-packages .venv
 .venv/bin/python -m pip install --upgrade pip
 .venv/bin/python -m pip install -e '.[dev]'
 .venv/bin/python -m pip freeze --exclude-editable > requirements.lock
+./scripts/download_face_model.sh
 
 pushd frontend >/dev/null
 npm ci

@@ -1,3 +1,4 @@
+from face_tracking.detection_protocol import DetectionResult
 from face_tracking.frame_store import HmiCameraState, LatestFrameStore
 from face_tracking.protocol import FrameMetadata
 
@@ -44,3 +45,12 @@ def test_store_rejects_non_jpeg_payloads() -> None:
 
     assert not store.update(b"not-a-jpeg", metadata())
     assert store.status()["invalid_frames"] == 1
+
+
+def test_detection_expires_after_one_second() -> None:
+    store = LatestFrameStore()
+    result = DetectionResult("camera-a", 1, 1, 1280, 720, 1, ())
+    store.update_detection(result, received_at_unix_ns=1_000_000_000)
+
+    assert store.detection(now_unix_ns=1_900_000_000) == result
+    assert store.detection(now_unix_ns=2_100_000_000) is None

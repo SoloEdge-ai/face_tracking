@@ -18,14 +18,15 @@ fi
 
 camera_pid=""
 hmi_pid=""
+detector_pid=""
 stop_children() {
   trap - EXIT INT TERM
-  for pid in "$camera_pid" "$hmi_pid"; do
+  for pid in "$camera_pid" "$hmi_pid" "$detector_pid"; do
     if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
       kill -TERM "$pid" 2>/dev/null || true
     fi
   done
-  for pid in "$camera_pid" "$hmi_pid"; do
+  for pid in "$camera_pid" "$hmi_pid" "$detector_pid"; do
     if [[ -n "$pid" ]]; then
       wait "$pid" 2>/dev/null || true
     fi
@@ -40,10 +41,12 @@ trap stop_children EXIT
 
 .venv/bin/python -m face_tracking.camera_driver &
 camera_pid=$!
+.venv/bin/python -m face_tracking.face_detector &
+detector_pid=$!
 .venv/bin/python -m face_tracking.hmi &
 hmi_pid=$!
 
 echo "Camera and HMI started. Open http://$(hostname -I | awk '{print $1}'):8080"
-wait -n "$camera_pid" "$hmi_pid"
+wait -n "$camera_pid" "$detector_pid" "$hmi_pid"
 echo "A project process stopped; shutting down the other one." >&2
 exit 1

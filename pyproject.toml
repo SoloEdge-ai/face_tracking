@@ -9,6 +9,7 @@ description = "Zenoh camera driver and HMI for face tracking"
 requires-python = ">=3.11"
 dependencies = [
   "fastapi>=0.115,<1",
+  "ultralytics==8.4.117",
   "uvicorn[standard]>=0.30,<1",
 ]
 

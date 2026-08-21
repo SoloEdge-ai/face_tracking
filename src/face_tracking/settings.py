@@ -35,11 +35,21 @@ class HmiSettings:
 
 
 @dataclass(frozen=True, slots=True)
+class DetectorSettings:
+    model_path: str
+    inference_hz: int
+    image_size: int
+    confidence: float
+    iou: float
+
+
+@dataclass(frozen=True, slots=True)
 class Settings:
     device_id: str
     camera: CameraSettings
     zenoh: ZenohSettings
     hmi: HmiSettings
+    detector: DetectorSettings
 
     @property
     def camera_image_key(self) -> str:
@@ -53,6 +63,18 @@ class Settings:
     def camera_liveliness_key(self) -> str:
         return f"{self.zenoh.key_prefix}/{self.device_id}/liveliness/camera"
 
+    @property
+    def detections_key(self) -> str:
+        return f"{self.zenoh.key_prefix}/{self.device_id}/detections"
+
+    @property
+    def detector_status_key(self) -> str:
+        return f"{self.zenoh.key_prefix}/{self.device_id}/diagnostics/detector"
+
+    @property
+    def detector_liveliness_key(self) -> str:
+        return f"{self.zenoh.key_prefix}/{self.device_id}/liveliness/detector"
+
 
 def load_settings(path: str | Path | None = None) -> Settings:
     config_path = Path(path or os.environ.get("FACE_TRACKING_CONFIG", "config/default.toml"))
@@ -65,9 +87,11 @@ def load_settings(path: str | Path | None = None) -> Settings:
     camera = raw["camera"]
     zenoh = raw["zenoh"]
     hmi = raw["hmi"]
+    detector = raw["detector"]
     return Settings(
         device_id=device_id,
         camera=CameraSettings(**camera),
         zenoh=ZenohSettings(**zenoh),
         hmi=HmiSettings(**hmi),
+        detector=DetectorSettings(**detector),
     )
