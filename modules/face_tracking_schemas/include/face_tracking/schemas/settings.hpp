@@ -38,6 +38,17 @@ struct HmiSettings {
   int offline_after_ms{};
 };
 
+struct PixelCenterControllerSettings {
+  int control_rate_hz{};
+  float deadband_x_px{};
+  float deadband_y_px{};
+  float kp_pan_deg_per_px{};
+  float kp_tilt_deg_per_px{};
+  float max_pan_step_deg{};
+  float max_tilt_step_deg{};
+  int observation_timeout_ms{};
+};
+
 struct TransportSettings {
   std::string device_id;
   MiddlewareSettings middleware;
@@ -49,6 +60,10 @@ struct TransportSettings {
   [[nodiscard]] std::string detections_key() const;
   [[nodiscard]] std::string detector_status_key() const;
   [[nodiscard]] std::string detector_liveliness_key() const;
+  [[nodiscard]] std::string selected_target_key() const;
+  [[nodiscard]] std::string pan_tilt_delta_key() const;
+  [[nodiscard]] std::string controller_status_key() const;
+  [[nodiscard]] std::string controller_liveliness_key() const;
 };
 
 struct CameraProcessSettings {
@@ -61,7 +76,13 @@ struct DetectorProcessSettings {
   DetectorSettings detector;
 };
 
+struct ControllerProcessSettings {
+  TransportSettings transport;
+  PixelCenterControllerSettings controller;
+};
+
 CameraProcessSettings load_camera_process_settings(const std::filesystem::path& path);
 DetectorProcessSettings load_detector_process_settings(const std::filesystem::path& path);
+ControllerProcessSettings load_controller_process_settings(const std::filesystem::path& path);
 
 }  // namespace face_tracking

@@ -58,6 +58,31 @@ DetectorProcessSettings load_detector_process_settings(const std::filesystem::pa
   return settings;
 }
 
+ControllerProcessSettings load_controller_process_settings(const std::filesystem::path& path) {
+  const auto root = YAML::LoadFile(path.string());
+  const auto controller = root["controller"];
+  ControllerProcessSettings settings{
+      .transport = load_transport(root),
+      .controller = {
+          .control_rate_hz = required<int>(controller, "control_rate_hz"),
+          .deadband_x_px = required<float>(controller, "deadband_x_px"),
+          .deadband_y_px = required<float>(controller, "deadband_y_px"),
+          .kp_pan_deg_per_px = required<float>(controller, "kp_pan_deg_per_px"),
+          .kp_tilt_deg_per_px = required<float>(controller, "kp_tilt_deg_per_px"),
+          .max_pan_step_deg = required<float>(controller, "max_pan_step_deg"),
+          .max_tilt_step_deg = required<float>(controller, "max_tilt_step_deg"),
+          .observation_timeout_ms = required<int>(controller, "observation_timeout_ms"),
+      },
+  };
+  const auto& value = settings.controller;
+  if (value.control_rate_hz <= 0 || value.deadband_x_px < 0 || value.deadband_y_px < 0 ||
+      value.kp_pan_deg_per_px < 0 || value.kp_tilt_deg_per_px < 0 ||
+      value.max_pan_step_deg <= 0 || value.max_tilt_step_deg <= 0 || value.observation_timeout_ms <= 0) {
+    throw std::runtime_error("invalid pixel center controller configuration");
+  }
+  return settings;
+}
+
 std::string TransportSettings::key(std::string_view suffix) const { return middleware.key_prefix + "/" + device_id + "/" + std::string(suffix); }
 std::string TransportSettings::camera_image_key() const { return key("camera/image"); }
 std::string TransportSettings::camera_status_key() const { return key("camera/status"); }
@@ -65,5 +90,9 @@ std::string TransportSettings::camera_liveliness_key() const { return key("livel
 std::string TransportSettings::detections_key() const { return key("detections"); }
 std::string TransportSettings::detector_status_key() const { return key("diagnostics/detector"); }
 std::string TransportSettings::detector_liveliness_key() const { return key("liveliness/detector"); }
+std::string TransportSettings::selected_target_key() const { return key("target/selected"); }
+std::string TransportSettings::pan_tilt_delta_key() const { return key("pan_tilt/delta_cmd"); }
+std::string TransportSettings::controller_status_key() const { return key("diagnostics/pixel_center_controller"); }
+std::string TransportSettings::controller_liveliness_key() const { return key("liveliness/pixel_center_controller"); }
 
 }  // namespace face_tracking

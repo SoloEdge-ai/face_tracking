@@ -25,4 +25,37 @@ void validate(const DetectionResult& result) {
   }
 }
 
+void validate(const SelectedTargetObservation& observation) {
+  if (observation.schema_version != kSchemaVersion) throw std::invalid_argument("unsupported schema version");
+  if (observation.tracking_state == TrackingState::no_target) {
+    if (observation.selected_track_id != 0) throw std::invalid_argument("NO_TARGET cannot carry a track id");
+    return;
+  }
+  if (observation.source_instance_id.empty() || observation.tracker_instance_id.empty() ||
+      observation.captured_at_unix_ns <= 0 || observation.selected_track_id == 0) {
+    throw std::invalid_argument("target identity is invalid");
+  }
+  if (observation.tracking_state == TrackingState::tracking) {
+    if (observation.image_width == 0 || observation.image_height == 0 ||
+        !std::isfinite(observation.target_center_x) || !std::isfinite(observation.target_center_y) ||
+        observation.target_center_x < 0 || observation.target_center_y < 0 ||
+        observation.target_center_x > observation.image_width || observation.target_center_y > observation.image_height) {
+      throw std::invalid_argument("target geometry is invalid");
+    }
+  }
+}
+
+void validate(const PanTiltDelta& command) {
+  if (command.schema_version != kSchemaVersion) throw std::invalid_argument("unsupported schema version");
+  if (command.computed_at_unix_ns <= 0 || !std::isfinite(command.delta_pan_deg) || !std::isfinite(command.delta_tilt_deg)) {
+    throw std::invalid_argument("controller command is invalid");
+  }
+  if (command.reason == ControllerDecision::applied || command.reason == ControllerDecision::deadband) {
+    if (command.source_instance_id.empty() || command.tracker_instance_id.empty() ||
+        command.captured_at_unix_ns <= 0 || command.selected_track_id == 0) {
+      throw std::invalid_argument("controller command identity is invalid");
+    }
+  }
+}
+
 }  // namespace face_tracking
