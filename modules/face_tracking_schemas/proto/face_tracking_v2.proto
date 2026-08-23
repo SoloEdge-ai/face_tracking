@@ -1,0 +1,73 @@
+syntax = "proto3";
+
+package face_tracking.wire.v2;
+
+message FrameMetadata {
+  uint32 schema_version = 1;
+  string source_instance_id = 2;
+  uint64 sequence = 3;
+  int64 captured_at_unix_ns = 4;
+  uint32 width = 5;
+  uint32 height = 6;
+  string capture_format = 7;
+  uint32 jpeg_quality = 8;
+}
+
+message DetectionBox {
+  float x = 1;
+  float y = 2;
+  float width = 3;
+  float height = 4;
+  float confidence = 5;
+}
+
+message DetectionResult {
+  uint32 schema_version = 1;
+  string source_instance_id = 2;
+  uint64 sequence = 3;
+  int64 captured_at_unix_ns = 4;
+  uint32 image_width = 5;
+  uint32 image_height = 6;
+  double inference_ms = 7;
+  repeated DetectionBox boxes = 8;
+}
+
+enum CameraState {
+  CAMERA_STATE_UNSPECIFIED = 0;
+  CAMERA_STATE_STARTING = 1;
+  CAMERA_STATE_STREAMING = 2;
+  CAMERA_STATE_RECONNECTING = 3;
+  CAMERA_STATE_ERROR = 4;
+  CAMERA_STATE_STOPPED = 5;
+}
+
+message CameraStatus {
+  uint32 schema_version = 1;
+  CameraState state = 2;
+  double capture_fps = 3;
+  double publish_fps = 4;
+  uint64 captured_frames = 5;
+  uint64 published_frames = 6;
+  uint64 dropped_frames = 7;
+  string device_path = 8;
+  optional string last_error = 9;
+}
+
+enum DetectorState {
+  DETECTOR_STATE_UNSPECIFIED = 0;
+  DETECTOR_STATE_STARTING = 1;
+  DETECTOR_STATE_STREAMING = 2;
+  DETECTOR_STATE_ERROR = 3;
+  DETECTOR_STATE_STOPPED = 4;
+}
+
+message DetectorStatus {
+  uint32 schema_version = 1;
+  DetectorState state = 2;
+  double inference_fps = 3;
+  uint64 processed_frames = 4;
+  uint64 dropped_frames = 5;
+  uint64 decode_errors = 6;
+  uint64 inference_errors = 7;
+  optional string last_error = 8;
+}
