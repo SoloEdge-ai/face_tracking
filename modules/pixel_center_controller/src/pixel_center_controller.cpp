@@ -27,7 +27,10 @@ struct PixelCenterController::Implementation {
   explicit Implementation(PixelCenterControllerSettings value) : settings(value) {}
 
   PixelCenterControllerSettings settings;
-  PixelCenterControllerStatus status{.state = PixelCenterControllerState::holding};
+  PixelCenterControllerStatus status{
+      .state = PixelCenterControllerState::holding,
+      .last_rejection_reason = std::nullopt,
+  };
   std::optional<SelectedTargetObservation> last_tracking;
   std::optional<std::pair<std::string, std::uint64_t>> last_image_key;
   std::optional<TrackingState> last_input_state;
@@ -104,7 +107,7 @@ std::optional<PanTiltDelta> PixelCenterController::process(
   state.status.last_delta_pan_deg = pan;
   state.status.last_delta_tilt_deg = tilt;
   state.status.last_rejection_reason.reset();
-  return {
+  return PanTiltDelta{
       .source_instance_id = observation.source_instance_id,
       .tracker_instance_id = observation.tracker_instance_id,
       .sequence = observation.sequence,
