@@ -62,7 +62,7 @@ class ServoTransport final : public servo::TransportPort {
   ~ServoTransport() override;
   ServoTransport(const ServoTransport&) = delete;
   ServoTransport& operator=(const ServoTransport&) = delete;
-  void start(CommandHandler command_handler, ActivityHandler activity_handler) override;
+  void start(CommandHandler command_handler, UpstreamHandler upstream_handler) override;
   void stop() override;
   void publish_state(const PanTiltCommandedState& state) override;
 

@@ -22,7 +22,7 @@ detector:
   confidence: 0.50
   iou: 0.45
   tracker:
-    retention_ms: 1000
+    retention_ms: 2500
     min_match_iou: 0.10
     max_center_distance_ratio: 1.0
 
@@ -40,6 +40,8 @@ servo:
   gpio_chip: 0
   frequency_hz: 50
   upstream_timeout_ms: 1500
+  max_input_pan_delta_deg: 1.5
+  max_input_tilt_delta_deg: 1.0
   tracking_enabled: true
   pan:
     gpio: 17

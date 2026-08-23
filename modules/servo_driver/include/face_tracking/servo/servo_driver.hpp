@@ -11,6 +11,8 @@
 
 namespace face_tracking::servo {
 
+enum class UpstreamEvent { activity, online, offline };
+
 class ServoPwmPort {
  public:
   virtual ~ServoPwmPort() = default;
@@ -43,9 +45,9 @@ class ServoDriver {
 class TransportPort {
  public:
   using CommandHandler = std::function<void(PanTiltDelta)>;
-  using ActivityHandler = std::function<void(bool)>;
+  using UpstreamHandler = std::function<void(UpstreamEvent)>;
   virtual ~TransportPort() = default;
-  virtual void start(CommandHandler command_handler, ActivityHandler activity_handler) = 0;
+  virtual void start(CommandHandler command_handler, UpstreamHandler upstream_handler) = 0;
   virtual void stop() = 0;
   virtual void publish_state(const PanTiltCommandedState& state) = 0;
 };

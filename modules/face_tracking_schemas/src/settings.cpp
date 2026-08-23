@@ -117,6 +117,8 @@ ServoProcessSettings load_servo_process_settings(const std::filesystem::path& pa
           .gpio_chip = required<int>(servo, "gpio_chip"),
           .frequency_hz = required<int>(servo, "frequency_hz"),
           .upstream_timeout_ms = required<int>(servo, "upstream_timeout_ms"),
+          .max_input_pan_delta_deg = required<float>(servo, "max_input_pan_delta_deg"),
+          .max_input_tilt_delta_deg = required<float>(servo, "max_input_tilt_delta_deg"),
           .tracking_enabled = required<bool>(servo, "tracking_enabled"),
           .pan = load_servo_axis(servo["pan"]),
           .tilt = load_servo_axis(servo["tilt"]),
@@ -126,6 +128,8 @@ ServoProcessSettings load_servo_process_settings(const std::filesystem::path& pa
   validate_servo_axis(settings.servo.tilt);
   if (settings.servo.gpio_chip < 0 || settings.servo.frequency_hz <= 0 ||
       settings.servo.upstream_timeout_ms <= 0 ||
+      settings.servo.max_input_pan_delta_deg <= 0 ||
+      settings.servo.max_input_tilt_delta_deg <= 0 ||
       settings.servo.pan.gpio == settings.servo.tilt.gpio) {
     throw std::runtime_error("invalid servo driver configuration");
   }

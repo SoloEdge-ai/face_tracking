@@ -170,3 +170,17 @@ TEST(FaceTracker, NeverReusesExpiredTrackIds) {
   ASSERT_EQ(replacement.size(), 1U);
   EXPECT_GT(replacement.front().track_id, first.front().track_id);
 }
+
+TEST(FaceTracker, RetainsIdentityThroughFiveMissingFramesAndReacquireWindow) {
+  face_tracking::detector::FaceTracker tracker(
+      {.retention_ms = 2500, .min_match_iou = 0.1F, .max_center_distance_ratio = 1.0F},
+      "tracker-test");
+  const auto first = tracker.update({{10, 20, 100, 100, 0.9F}}, 1'000'000'000);
+  ASSERT_EQ(first.size(), 1U);
+  for (std::int64_t frame = 1; frame <= 5; ++frame) {
+    EXPECT_TRUE(tracker.update({}, 1'000'000'000 + frame * 200'000'000).empty());
+  }
+  const auto reacquired = tracker.update({{10, 20, 100, 100, 0.9F}}, 3'000'000'000);
+  ASSERT_EQ(reacquired.size(), 1U);
+  EXPECT_EQ(reacquired.front().track_id, first.front().track_id);
+}

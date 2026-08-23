@@ -24,7 +24,7 @@ struct CameraSettings {
 };
 
 struct TrackerSettings {
-  int retention_ms{1000};
+  int retention_ms{2500};
   float min_match_iou{0.1F};
   float max_center_distance_ratio{1.0F};
 };
@@ -71,6 +71,8 @@ struct ServoDriverSettings {
   int gpio_chip{};
   int frequency_hz{};
   int upstream_timeout_ms{};
+  float max_input_pan_delta_deg{};
+  float max_input_tilt_delta_deg{};
   bool tracking_enabled{};
   ServoAxisSettings pan;
   ServoAxisSettings tilt;

@@ -197,9 +197,9 @@ struct ServoTransport::Implementation {
         liveliness(session.liveliness_declare_token(
             zenoh::KeyExpr(settings.servo_liveliness_key()))) {}
 
-  void activity(bool alive) {
+  void upstream(servo::UpstreamEvent event) {
     std::lock_guard lock(handler_mutex);
-    if (activity_handler) activity_handler(alive);
+    if (upstream_handler) upstream_handler(event);
   }
 
   TransportSettings settings;
@@ -212,7 +212,7 @@ struct ServoTransport::Implementation {
   std::optional<zenoh::Queryable<void>> state_queryable;
   std::mutex handler_mutex;
   servo::TransportPort::CommandHandler command_handler;
-  servo::TransportPort::ActivityHandler activity_handler;
+  servo::TransportPort::UpstreamHandler upstream_handler;
   std::mutex state_mutex;
   std::optional<PanTiltCommandedState> latest_state;
 };
@@ -221,11 +221,11 @@ ServoTransport::ServoTransport(const TransportSettings& settings)
     : implementation_(std::make_unique<Implementation>(settings)) {}
 ServoTransport::~ServoTransport() = default;
 
-void ServoTransport::start(CommandHandler command_handler, ActivityHandler activity_handler) {
+void ServoTransport::start(CommandHandler command_handler, UpstreamHandler upstream_handler) {
   {
     std::lock_guard lock(implementation_->handler_mutex);
     implementation_->command_handler = std::move(command_handler);
-    implementation_->activity_handler = std::move(activity_handler);
+    implementation_->upstream_handler = std::move(upstream_handler);
   }
   implementation_->delta_subscriber.emplace(implementation_->session.declare_subscriber(
       zenoh::KeyExpr(implementation_->settings.pan_tilt_delta_key()),
@@ -236,7 +236,6 @@ void ServoTransport::start(CommandHandler command_handler, ActivityHandler activ
           if (implementation_->command_handler) {
             implementation_->command_handler(std::move(command));
           }
-          if (implementation_->activity_handler) implementation_->activity_handler(true);
         } catch (const std::exception&) {
           // Invalid commands do not refresh upstream activity.
         }
@@ -247,7 +246,7 @@ void ServoTransport::start(CommandHandler command_handler, ActivityHandler activ
       [this](const zenoh::Sample& sample) {
         try {
           (void)codec::decode_pixel_center_controller_status(sample.get_payload().as_vector());
-          implementation_->activity(true);
+          implementation_->upstream(servo::UpstreamEvent::activity);
         } catch (const std::exception&) {
           // Invalid status does not refresh upstream activity.
         }
@@ -259,7 +258,9 @@ void ServoTransport::start(CommandHandler command_handler, ActivityHandler activ
       implementation_->session.liveliness_declare_subscriber(
           zenoh::KeyExpr(implementation_->settings.controller_liveliness_key()),
           [this](const zenoh::Sample& sample) {
-            implementation_->activity(sample.get_kind() == Z_SAMPLE_KIND_PUT);
+            implementation_->upstream(sample.get_kind() == Z_SAMPLE_KIND_PUT
+                                          ? servo::UpstreamEvent::online
+                                          : servo::UpstreamEvent::offline);
           },
           zenoh::closures::none, std::move(liveliness_options)));
   zenoh::Session::QueryableOptions queryable_options;
@@ -288,7 +289,7 @@ void ServoTransport::stop() {
   implementation_->delta_subscriber.reset();
   std::lock_guard lock(implementation_->handler_mutex);
   implementation_->command_handler = {};
-  implementation_->activity_handler = {};
+  implementation_->upstream_handler = {};
 }
 
 void ServoTransport::publish_state(const PanTiltCommandedState& state) {

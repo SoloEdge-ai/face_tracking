@@ -11,6 +11,7 @@
 #include <thread>
 #include <tuple>
 #include <utility>
+#include <variant>
 
 namespace face_tracking::servo {
 namespace {
@@ -94,6 +95,14 @@ const PanTiltCommandedState& ServoDriver::process(const PanTiltDelta& command, s
       command_age_ns > static_cast<std::int64_t>(driver.settings.upstream_timeout_ms) * 1'000'000LL) {
     ++driver.state.rejected_commands;
     driver.home(ServoDecision::home_stale, now);
+    return driver.state;
+  }
+  if (std::abs(command.delta_pan_deg) > driver.settings.max_input_pan_delta_deg ||
+      std::abs(command.delta_tilt_deg) > driver.settings.max_input_tilt_delta_deg) {
+    ++driver.state.rejected_commands;
+    driver.state.decision = ServoDecision::rejected_invalid;
+    driver.state.state = ServoDriverState::holding;
+    driver.update_time(now);
     return driver.state;
   }
   driver.last_upstream_at_unix_ns = now;
@@ -253,8 +262,8 @@ struct ServoDriverService::Implementation {
   ServoDriver driver;
   TransportPort& transport;
   std::mutex mutex;
-  std::deque<PanTiltDelta> commands;
-  std::optional<bool> upstream_activity;
+  std::deque<std::variant<PanTiltDelta, UpstreamEvent>> events;
+  bool upstream_online{};
 };
 
 ServoDriverService::ServoDriverService(
@@ -269,38 +278,43 @@ void ServoDriverService::run(std::stop_token stop_token) {
     service.transport.start(
         [&service](PanTiltDelta command) {
           std::lock_guard lock(service.mutex);
-          service.commands.push_back(std::move(command));
+          service.events.emplace_back(std::move(command));
         },
-        [&service](bool alive) {
+        [&service](UpstreamEvent event) {
           std::lock_guard lock(service.mutex);
-          service.upstream_activity = alive;
+          service.events.emplace_back(event);
         });
     auto last_status_at = std::chrono::steady_clock::now();
     while (!stop_token.stop_requested()) {
-      std::deque<PanTiltDelta> commands;
-      std::optional<bool> activity;
+      std::deque<std::variant<PanTiltDelta, UpstreamEvent>> events;
       {
         std::lock_guard lock(service.mutex);
-        commands.swap(service.commands);
-        activity = service.upstream_activity;
-        service.upstream_activity.reset();
+        events.swap(service.events);
       }
       const auto now = now_unix_ns();
-      if (activity) {
-        if (*activity) {
-          service.driver.note_upstream_activity(now);
-        } else {
-          service.transport.publish_state(service.driver.upstream_lost(now));
+      for (const auto& event : events) {
+        if (const auto* upstream = std::get_if<UpstreamEvent>(&event)) {
+          if (*upstream == UpstreamEvent::online) {
+            service.upstream_online = true;
+            service.driver.note_upstream_activity(now);
+          } else if (*upstream == UpstreamEvent::offline) {
+            service.upstream_online = false;
+            service.transport.publish_state(service.driver.upstream_lost(now));
+          } else if (service.upstream_online) {
+            service.driver.note_upstream_activity(now);
+          }
+          continue;
         }
-      }
-      for (const auto& command : commands) {
-        service.transport.publish_state(service.driver.process(command, now));
+        if (service.upstream_online) {
+          service.transport.publish_state(
+              service.driver.process(std::get<PanTiltDelta>(event), now));
+        }
       }
       if (service.driver.check_timeout(now)) {
         service.transport.publish_state(service.driver.state());
       }
       const auto steady_now = std::chrono::steady_clock::now();
-      if (steady_now - last_status_at >= std::chrono::seconds(1)) {
+      if (steady_now - last_status_at >= std::chrono::milliseconds(250)) {
         service.transport.publish_state(service.driver.state());
         last_status_at = steady_now;
       }
