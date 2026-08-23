@@ -118,6 +118,7 @@ ServoProcessSettings load_servo_process_settings(const std::filesystem::path& pa
       .servo = {
           .pwm_chip = required<int>(servo, "pwm_chip"),
           .frequency_hz = required<int>(servo, "frequency_hz"),
+          .command_max_age_ms = required<int>(servo, "command_max_age_ms"),
           .upstream_timeout_ms = required<int>(servo, "upstream_timeout_ms"),
           .max_input_pan_delta_deg = required<float>(servo, "max_input_pan_delta_deg"),
           .max_input_tilt_delta_deg = required<float>(servo, "max_input_tilt_delta_deg"),
@@ -133,7 +134,7 @@ ServoProcessSettings load_servo_process_settings(const std::filesystem::path& pa
            1'000'000LL;
   };
   if (settings.servo.pwm_chip < 0 || settings.servo.frequency_hz <= 0 ||
-      settings.servo.upstream_timeout_ms <= 0 ||
+      settings.servo.command_max_age_ms <= 0 || settings.servo.upstream_timeout_ms <= 0 ||
       settings.servo.max_input_pan_delta_deg <= 0 ||
       settings.servo.max_input_tilt_delta_deg <= 0 ||
       settings.servo.pan.gpio == settings.servo.tilt.gpio ||

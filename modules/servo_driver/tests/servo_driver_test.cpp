@@ -74,6 +74,7 @@ face_tracking::ServoDriverSettings settings() {
   return {
       .pwm_chip = 0,
       .frequency_hz = 50,
+      .command_max_age_ms = 1500,
       .upstream_timeout_ms = 5000,
       .max_input_pan_delta_deg = 1.5,
       .max_input_tilt_delta_deg = 1.0,
@@ -218,6 +219,21 @@ TEST(ServoDriver, StaleHoldsWithoutRefreshingTheFreshControlTimeout) {
   EXPECT_FLOAT_EQ(driver.state().commanded_pan_deg, 135);
   EXPECT_FLOAT_EQ(driver.state().commanded_tilt_deg, 20);
   EXPECT_EQ(driver.state().decision, face_tracking::ServoDecision::home_upstream_timeout);
+}
+
+TEST(ServoDriver, AgedAppliedCommandHoldsAndCannotMoveTheServos) {
+  FakePwm pwm;
+  face_tracking::servo::ServoDriver driver(settings(), pwm);
+  driver.start(1'000'000'000);
+  driver.process(command(1, 1, face_tracking::ControllerDecision::applied), 1'100'000'000);
+
+  auto aged = command(1, 1, face_tracking::ControllerDecision::applied, 2);
+  aged.computed_at_unix_ns = 2'000'000'000;
+  const auto& held = driver.process(aged, 4'000'000'001);
+
+  EXPECT_FLOAT_EQ(held.commanded_pan_deg, 136);
+  EXPECT_FLOAT_EQ(held.commanded_tilt_deg, 21);
+  EXPECT_EQ(held.decision, face_tracking::ServoDecision::held_stale);
 }
 
 TEST(ServoDriver, ReturnsHomeAfterUpstreamTimeout) {

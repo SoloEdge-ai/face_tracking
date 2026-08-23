@@ -41,6 +41,7 @@ controller:
 servo:
   pwm_chip: 0
   frequency_hz: 50
+  command_max_age_ms: 1500
   upstream_timeout_ms: 5000
   max_input_pan_delta_deg: 1.5
   max_input_tilt_delta_deg: 1.0

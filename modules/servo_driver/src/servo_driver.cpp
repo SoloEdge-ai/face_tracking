@@ -100,7 +100,7 @@ const PanTiltCommandedState& ServoDriver::process(const PanTiltDelta& command, s
 
   const auto command_age_ns = now - command.computed_at_unix_ns;
   if (command_age_ns < -50'000'000LL ||
-      command_age_ns > static_cast<std::int64_t>(driver.settings.upstream_timeout_ms) * 1'000'000LL) {
+      command_age_ns > static_cast<std::int64_t>(driver.settings.command_max_age_ms) * 1'000'000LL) {
     ++driver.state.rejected_commands;
     driver.hold(ServoDecision::held_stale, now);
     return driver.state;
