@@ -67,7 +67,8 @@ TEST(PixelCenterController, RejectsDuplicateOutOfOrderAndStaleObservations) {
   EXPECT_FLOAT_EQ(out_of_order->delta_pan_deg, 0.0F);
   EXPECT_FLOAT_EQ(out_of_order->delta_tilt_deg, 0.0F);
 
-  const auto stale = controller.check_timeout(1'250'000'000);
+  EXPECT_FALSE(controller.check_timeout(1'200'000'000));
+  const auto stale = controller.check_timeout(1'200'000'001);
   ASSERT_TRUE(stale);
   EXPECT_EQ(stale->reason, face_tracking::ControllerDecision::stale);
   EXPECT_FLOAT_EQ(stale->delta_pan_deg, 0.0F);

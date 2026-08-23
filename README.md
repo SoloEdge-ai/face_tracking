@@ -39,8 +39,8 @@ Keys remain under `face_tracking/{device_id}`:
 - `diagnostics/detector`: Protobuf v2 `DetectorStatus`.
 - `target/selected`: Protobuf v2 `SelectedTargetObservation` from the HMI target manager.
 - `pan_tilt/delta_cmd`: Protobuf v2 `PanTiltDelta` from the pixel-center controller.
-- `diagnostics/controller`: Protobuf v2 `PixelCenterControllerStatus`.
-- `liveliness/camera`, `liveliness/detector`, and `liveliness/controller`: process liveliness tokens.
+- `diagnostics/pixel_center_controller`: Protobuf v2 `PixelCenterControllerStatus`.
+- `liveliness/camera`, `liveliness/detector`, and `liveliness/pixel_center_controller`: process liveliness tokens.
 
 Every detection includes a tracker-process identity plus a `track_id`; the pair is the stable selection identity. The controller runs at 20 Hz and accepts only fresh `TRACKING` observations. It applies a 30 px horizontal and 24 px vertical deadband, 0.01 degree/px proportional gain, and per-frame limits of 1.5 degrees pan and 1.0 degree tilt. Missing, lost, stale (over the deployed 600 ms freshness limit), duplicate, or out-of-order observations produce a safe zero delta. The controller's timeout remains a typed profile setting; unit tests exercise a stricter 200 ms boundary. This release intentionally stops at the controller command boundary and does not drive GPIO or servos.
 
