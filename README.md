@@ -6,7 +6,8 @@ Raspberry Pi 5 face-detection pipeline with modular C++ camera and detector proc
 
 - `modules/face_tracking_schemas`: middleware-neutral DTOs, validation, Protobuf v2 schema and codecs.
 - `modules/camera_service`: UVC capture, latest-frame buffering, JPEG encoding and rate limiting.
-- `modules/face_detector_tracker`: OpenCV DNN inference, latest-only scheduling and YOLO post-processing.
+- `modules/face_detector_tracker`: OpenCV DNN inference, latest-only scheduling, YOLO post-processing and stable short-term face tracks.
+- `modules/pixel_center_controller`: middleware-neutral target validation and bounded pixel-centering P control.
 - `adapters/zenoh`: Zenoh publishers/subscriber and the C++ process entrypoints.
 - `modules/web_hmi_target_manager`: FastAPI HMI service, transport adapter, and React application.
 - `modules/pan_tilt_bringup`: safe `zenohd` handover and child-process lifecycle.
@@ -24,6 +25,8 @@ chmod +x setup.sh run.sh
 
 Open `http://192.168.50.2:8080`. Set `FACE_TRACKING_CONFIG` to select another YAML profile or `FACE_TRACKING_DEVICE_ID` to override the configured device identifier.
 
+The HMI draws every currently observed face on the live video and lists the same tracks in the side panel. Select a face by clicking its box or list row; use **Cancel tracking** to return to `NO_TARGET`. `LOST` means the selected track is temporarily absent and may be reacquired within the configured grace period. An empty list is normal when nobody is in view.
+
 `run.sh` does not enable Zenoh on boot. Bringup reuses `zenohd.service`, or interrupts a manual `/usr/bin/zenohd` only when it is owned by the current user. It never stops an unrelated listener and leaves the system router active after application exit.
 
 ## Wire interfaces
@@ -34,7 +37,12 @@ Keys remain under `face_tracking/{device_id}`:
 - `camera/status`: Protobuf v2 `CameraStatus`.
 - `detections`: Protobuf v2 `DetectionResult`.
 - `diagnostics/detector`: Protobuf v2 `DetectorStatus`.
-- `liveliness/camera` and `liveliness/detector`: process liveliness tokens.
+- `target/selected`: Protobuf v2 `SelectedTargetObservation` from the HMI target manager.
+- `pan_tilt/delta_cmd`: Protobuf v2 `PanTiltDelta` from the pixel-center controller.
+- `diagnostics/controller`: Protobuf v2 `PixelCenterControllerStatus`.
+- `liveliness/camera`, `liveliness/detector`, and `liveliness/controller`: process liveliness tokens.
+
+Every detection includes a tracker-process identity plus a `track_id`; the pair is the stable selection identity. The controller runs at 20 Hz and accepts only fresh `TRACKING` observations. It applies a 30 px horizontal and 24 px vertical deadband, 0.01 degree/px proportional gain, and per-frame limits of 1.5 degrees pan and 1.0 degree tilt. Missing, lost, stale (over the deployed 600 ms freshness limit), duplicate, or out-of-order observations produce a safe zero delta. The controller's timeout remains a typed profile setting; unit tests exercise a stricter 200 ms boundary. This release intentionally stops at the controller command boundary and does not drive GPIO or servos.
 
 ## Development
 
@@ -66,9 +74,12 @@ The default build pins OpenCV 4.12 because Debian 12's OpenCV 4.6 cannot execute
 
 ## Raspberry Pi 5 validation (2026-08-23)
 
-- Release build: 14/14 CTest cases, 12/12 HMI pytest cases, Ruff, frontend typecheck/build, and `npm audit` all pass.
+- Release build: 30/30 CTest cases, 19/19 HMI pytest cases, Ruff, frontend typecheck/build, and `npm audit` all pass.
 - Camera: 1280x720 capture at 29.9 FPS and JPEG publication at 10.0 FPS, with latest-only replacement and no backlog.
-- Cross-language transport: all four Zenoh v2 channels decode in Python, including the JPEG metadata attachment and both diagnostics payloads.
+- Cross-language transport: camera, detector, target, controller, status, attachment, and liveliness channels interoperate across C++ and Python.
+- Tracking/control transport: synthetic target selection verifies C++ controller output (`pan +1.0`, `tilt -0.6`) and automatic zero output after the configured freshness limit. The real empty-camera scene remains stable at zero faces, `NO_TARGET`, and safe zero control output.
+- Live-face latency under the thermally limited full-system load measured 380–551 ms from capture to controller decision, so the deployment profile uses a 600 ms freshness limit. Adequate active cooling is still required to restore the 5 FPS detector performance gate and provide latency margin.
+- Process lifecycle: bringup starts camera, detector, controller, and HMI together; SIGINT/SIGTERM completes within the bounded shutdown window even with live browser WebSockets.
 - Fixed Lena image: C++ OpenCV DNN produces one box `(212, 187, 144, 202)` at confidence `0.833418`; the former Python/Ultralytics implementation produces `[212.097, 186.852, 356.496, 389.138]` at `0.833417`.
 - Detector benchmark while the CPU is not thermally limited: C++ averages 154-160 ms (6.3-6.5 FPS), versus 442 ms (2.26 FPS) for the former Python implementation. During the same comparison the C++ process used about 354-369% CPU and 126 MiB RSS; Python/Ultralytics used about 107-134% CPU and 846 MiB peak RSS. C++ trades more parallel CPU utilization for 2.8x throughput while reducing memory substantially.
 

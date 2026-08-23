@@ -120,6 +120,17 @@ TEST(Schemas, TargetObservationAndControllerOutputRoundTrip) {
       face_tracking::codec::encode(command));
   EXPECT_FLOAT_EQ(decoded_command.delta_pan_deg, 1.0F);
   EXPECT_EQ(decoded_command.reason, face_tracking::ControllerDecision::applied);
+
+  command.delta_pan_deg = 0;
+  command.delta_tilt_deg = 0;
+  command.reason = face_tracking::ControllerDecision::duplicate;
+  EXPECT_EQ(
+      face_tracking::codec::decode_pan_tilt_delta(face_tracking::codec::encode(command)).reason,
+      face_tracking::ControllerDecision::duplicate);
+  command.reason = face_tracking::ControllerDecision::out_of_order;
+  EXPECT_EQ(
+      face_tracking::codec::decode_pan_tilt_delta(face_tracking::codec::encode(command)).reason,
+      face_tracking::ControllerDecision::out_of_order);
 }
 
 TEST(Schemas, PythonGoldenCameraStatusRoundTripsByteForByte) {

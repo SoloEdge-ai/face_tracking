@@ -126,6 +126,10 @@ def test_controller_output_and_status_protobuf_decode() -> None:
         reason=wire.CONTROLLER_DECISION_APPLIED,
     )
     assert decode_pan_tilt_delta(delta.SerializeToString())["reason"] == "APPLIED"
+    delta.reason = wire.CONTROLLER_DECISION_DUPLICATE
+    assert decode_pan_tilt_delta(delta.SerializeToString())["reason"] == "DUPLICATE"
+    delta.reason = wire.CONTROLLER_DECISION_OUT_OF_ORDER
+    assert decode_pan_tilt_delta(delta.SerializeToString())["reason"] == "OUT_OF_ORDER"
     status = wire.PixelCenterControllerStatus(
         schema_version=2,
         state=wire.PIXEL_CENTER_CONTROLLER_STATE_ACTIVE,

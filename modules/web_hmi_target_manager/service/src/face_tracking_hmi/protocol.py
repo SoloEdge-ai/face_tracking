@@ -134,6 +134,8 @@ def decode_pan_tilt_delta(payload: bytes) -> dict[str, object]:
             wire.CONTROLLER_DECISION_NO_TARGET: "NO_TARGET",
             wire.CONTROLLER_DECISION_LOST: "LOST",
             wire.CONTROLLER_DECISION_STALE: "STALE",
+            wire.CONTROLLER_DECISION_DUPLICATE: "DUPLICATE",
+            wire.CONTROLLER_DECISION_OUT_OF_ORDER: "OUT_OF_ORDER",
         }
         return {
             "schema_version": message.schema_version,
