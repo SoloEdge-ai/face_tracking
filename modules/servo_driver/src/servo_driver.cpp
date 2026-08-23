@@ -99,6 +99,19 @@ const PanTiltCommandedState& ServoDriver::process(const PanTiltDelta& command, s
   driver.last_upstream_at_unix_ns = now;
   if (command.selected_track_id != 0) driver.state.last_track_id = command.selected_track_id;
 
+  if (command.reason == ControllerDecision::lost) {
+    driver.home(ServoDecision::home_lost, now);
+    return driver.state;
+  }
+  if (command.reason == ControllerDecision::no_target) {
+    driver.home(ServoDecision::home_no_target, now);
+    return driver.state;
+  }
+  if (command.reason == ControllerDecision::stale) {
+    driver.home(ServoDecision::home_stale, now);
+    return driver.state;
+  }
+
   if (!command.source_instance_id.empty() && !command.tracker_instance_id.empty()) {
     const auto identity = std::tuple{command.source_instance_id, command.tracker_instance_id,
                                      command.sequence};
@@ -168,14 +181,9 @@ const PanTiltCommandedState& ServoDriver::process(const PanTiltDelta& command, s
       driver.state.state = ServoDriverState::holding;
       break;
     case ControllerDecision::lost:
-      driver.home(ServoDecision::home_lost, now);
-      return driver.state;
     case ControllerDecision::no_target:
-      driver.home(ServoDecision::home_no_target, now);
-      return driver.state;
     case ControllerDecision::stale:
-      driver.home(ServoDecision::home_stale, now);
-      return driver.state;
+      throw std::logic_error("home decisions must be handled before ordering checks");
     case ControllerDecision::duplicate:
       ++driver.state.rejected_commands;
       driver.state.decision = ServoDecision::rejected_duplicate;
@@ -224,6 +232,18 @@ const PanTiltCommandedState& ServoDriver::stop(std::int64_t now) noexcept {
   return driver.state;
 }
 
+const PanTiltCommandedState& ServoDriver::fail(std::string error, std::int64_t now) noexcept {
+  auto& driver = *implementation_;
+  driver.pwm.stop();
+  driver.started = false;
+  driver.state.updated_at_unix_ns = now;
+  driver.state.state = ServoDriverState::error;
+  driver.state.decision = ServoDecision::error;
+  driver.state.pwm_active = false;
+  driver.state.last_error = std::move(error);
+  return driver.state;
+}
+
 const PanTiltCommandedState& ServoDriver::state() const { return implementation_->state; }
 
 struct ServoDriverService::Implementation {
@@ -244,49 +264,58 @@ ServoDriverService::~ServoDriverService() = default;
 
 void ServoDriverService::run(std::stop_token stop_token) {
   auto& service = *implementation_;
-  service.transport.publish_state(service.driver.start(now_unix_ns()));
-  service.transport.start(
-      [&service](PanTiltDelta command) {
+  try {
+    service.transport.publish_state(service.driver.start(now_unix_ns()));
+    service.transport.start(
+        [&service](PanTiltDelta command) {
+          std::lock_guard lock(service.mutex);
+          service.commands.push_back(std::move(command));
+        },
+        [&service](bool alive) {
+          std::lock_guard lock(service.mutex);
+          service.upstream_activity = alive;
+        });
+    auto last_status_at = std::chrono::steady_clock::now();
+    while (!stop_token.stop_requested()) {
+      std::deque<PanTiltDelta> commands;
+      std::optional<bool> activity;
+      {
         std::lock_guard lock(service.mutex);
-        service.commands.push_back(std::move(command));
-      },
-      [&service](bool alive) {
-        std::lock_guard lock(service.mutex);
-        service.upstream_activity = alive;
-      });
-  auto last_status_at = std::chrono::steady_clock::now();
-  while (!stop_token.stop_requested()) {
-    std::deque<PanTiltDelta> commands;
-    std::optional<bool> activity;
-    {
-      std::lock_guard lock(service.mutex);
-      commands.swap(service.commands);
-      activity = service.upstream_activity;
-      service.upstream_activity.reset();
-    }
-    const auto now = now_unix_ns();
-    if (activity) {
-      if (*activity) {
-        service.driver.note_upstream_activity(now);
-      } else {
-        service.transport.publish_state(service.driver.upstream_lost(now));
+        commands.swap(service.commands);
+        activity = service.upstream_activity;
+        service.upstream_activity.reset();
       }
+      const auto now = now_unix_ns();
+      if (activity) {
+        if (*activity) {
+          service.driver.note_upstream_activity(now);
+        } else {
+          service.transport.publish_state(service.driver.upstream_lost(now));
+        }
+      }
+      for (const auto& command : commands) {
+        service.transport.publish_state(service.driver.process(command, now));
+      }
+      if (service.driver.check_timeout(now)) {
+        service.transport.publish_state(service.driver.state());
+      }
+      const auto steady_now = std::chrono::steady_clock::now();
+      if (steady_now - last_status_at >= std::chrono::seconds(1)) {
+        service.transport.publish_state(service.driver.state());
+        last_status_at = steady_now;
+      }
+      std::this_thread::sleep_for(std::chrono::milliseconds(20));
     }
-    for (const auto& command : commands) {
-      service.transport.publish_state(service.driver.process(command, now));
+    service.transport.stop();
+    service.transport.publish_state(service.driver.stop(now_unix_ns()));
+  } catch (const std::exception& error) {
+    try {
+      service.transport.publish_state(service.driver.fail(error.what(), now_unix_ns()));
+    } catch (const std::exception&) {
     }
-    if (service.driver.check_timeout(now)) {
-      service.transport.publish_state(service.driver.state());
-    }
-    const auto steady_now = std::chrono::steady_clock::now();
-    if (steady_now - last_status_at >= std::chrono::seconds(1)) {
-      service.transport.publish_state(service.driver.state());
-      last_status_at = steady_now;
-    }
-    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    service.transport.stop();
+    throw;
   }
-  service.transport.stop();
-  service.transport.publish_state(service.driver.stop(now_unix_ns()));
 }
 
 }  // namespace face_tracking::servo

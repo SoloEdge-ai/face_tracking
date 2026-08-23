@@ -4,6 +4,7 @@
 #include <functional>
 #include <memory>
 #include <stop_token>
+#include <string>
 
 #include "face_tracking/schemas/settings.hpp"
 #include "face_tracking/schemas/types.hpp"
@@ -31,6 +32,7 @@ class ServoDriver {
   const PanTiltCommandedState& upstream_lost(std::int64_t now_unix_ns);
   bool check_timeout(std::int64_t now_unix_ns);
   const PanTiltCommandedState& stop(std::int64_t now_unix_ns) noexcept;
+  const PanTiltCommandedState& fail(std::string error, std::int64_t now_unix_ns) noexcept;
   [[nodiscard]] const PanTiltCommandedState& state() const;
 
  private:

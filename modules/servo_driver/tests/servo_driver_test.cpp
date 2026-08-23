@@ -92,6 +92,20 @@ TEST(ServoDriver, MissingHoldsAndLostReturnsHome) {
   EXPECT_EQ(home.decision, face_tracking::ServoDecision::home_lost);
 }
 
+TEST(ServoDriver, StaleForTheLastSeenSequenceStillReturnsHome) {
+  FakePwm pwm;
+  face_tracking::servo::ServoDriver driver(settings(), pwm);
+  driver.start(1'100'000'000);
+  driver.process(command(5, 5, face_tracking::ControllerDecision::applied), 1'100'000'001);
+  driver.process(
+      command(0, 0, face_tracking::ControllerDecision::missing_hold, 2), 1'100'000'002);
+  const auto& home = driver.process(
+      command(0, 0, face_tracking::ControllerDecision::stale, 2), 1'100'000'003);
+  EXPECT_FLOAT_EQ(home.commanded_pan_deg, 135);
+  EXPECT_FLOAT_EQ(home.commanded_tilt_deg, 10);
+  EXPECT_EQ(home.decision, face_tracking::ServoDecision::home_stale);
+}
+
 TEST(ServoDriver, ReturnsHomeAfterUpstreamTimeout) {
   FakePwm pwm;
   face_tracking::servo::ServoDriver driver(settings(), pwm);

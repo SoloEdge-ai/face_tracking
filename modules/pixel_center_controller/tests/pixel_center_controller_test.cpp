@@ -104,6 +104,16 @@ TEST(PixelCenterController, MissingTargetProducesZeroHoldWithoutReusingOldError)
   EXPECT_FALSE(controller.check_timeout(1'200'000'000));
 }
 
+TEST(PixelCenterController, StaleMissingTargetDoesNotExtendTrackingLifetime) {
+  face_tracking::controller::PixelCenterController controller(settings());
+  ASSERT_TRUE(controller.process(observation(740, 300), 1'100'000'000));
+  auto missing = observation(740, 300, 2);
+  missing.tracking_state = face_tracking::TrackingState::missing;
+  const auto command = controller.process(missing, 1'300'000'001);
+  ASSERT_TRUE(command);
+  EXPECT_EQ(command->reason, face_tracking::ControllerDecision::stale);
+}
+
 TEST(PixelCenterController, AllowsSwitchingTargetsWithinTheSameDetectionFrame) {
   face_tracking::controller::PixelCenterController controller(settings());
   const auto first = controller.process(observation(740, 360, 5, 7), 1'100'000'000);
