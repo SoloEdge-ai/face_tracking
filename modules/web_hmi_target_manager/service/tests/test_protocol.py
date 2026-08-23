@@ -6,6 +6,8 @@ from face_tracking_hmi.protocol import (
     decode_detection,
     decode_detector_status,
     decode_frame_metadata,
+    decode_pan_tilt_delta,
+    decode_controller_status,
 )
 
 
@@ -108,3 +110,30 @@ def test_detector_status_protobuf_decodes() -> None:
         processed_frames=12,
     ).SerializeToString()
     assert decode_detector_status(payload)["state"] == "STREAMING"
+
+
+def test_controller_output_and_status_protobuf_decode() -> None:
+    delta = wire.PanTiltDelta(
+        schema_version=2,
+        source_instance_id="camera",
+        tracker_instance_id="tracker",
+        sequence=8,
+        captured_at_unix_ns=10,
+        computed_at_unix_ns=20,
+        selected_track_id=7,
+        delta_pan_deg=1.0,
+        delta_tilt_deg=-0.5,
+        reason=wire.CONTROLLER_DECISION_APPLIED,
+    )
+    assert decode_pan_tilt_delta(delta.SerializeToString())["reason"] == "APPLIED"
+    status = wire.PixelCenterControllerStatus(
+        schema_version=2,
+        state=wire.PIXEL_CENTER_CONTROLLER_STATE_ACTIVE,
+        observation_age_ms=100,
+        error_x_px=100,
+        last_delta_pan_deg=1.0,
+        processed_observations=3,
+    )
+    decoded = decode_controller_status(status.SerializeToString())
+    assert decoded["state"] == "ACTIVE"
+    assert decoded["error_x_px"] == 100

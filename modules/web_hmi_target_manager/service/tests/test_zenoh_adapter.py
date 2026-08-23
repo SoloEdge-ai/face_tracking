@@ -57,5 +57,7 @@ def test_zenoh_adapter_declares_and_releases_all_subscribers(monkeypatch: Monkey
         "face_tracking/pi/camera/status",
         "face_tracking/pi/detections",
         "face_tracking/pi/diagnostics/detector",
+        "face_tracking/pi/pan_tilt/delta_cmd",
+        "face_tracking/pi/diagnostics/pixel_center_controller",
     ]
     assert all(declaration.undeclared for declaration in session.declarations)
