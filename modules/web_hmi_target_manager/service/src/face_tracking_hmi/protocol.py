@@ -1,6 +1,12 @@
 from __future__ import annotations
 
-from .domain import DetectionBox, DetectionResult, FrameMetadata
+from .domain import (
+    DetectionBox,
+    DetectionResult,
+    FrameMetadata,
+    SelectedTargetObservation,
+    TrackingState,
+)
 from .generated import face_tracking_v2_pb2 as wire
 
 
@@ -25,9 +31,9 @@ def decode_detection(payload: bytes) -> DetectionResult:
     try:
         message = wire.DetectionResult.FromString(payload)
         value = DetectionResult(
-            message.source_instance_id, message.sequence, message.captured_at_unix_ns,
+            message.source_instance_id, message.tracker_instance_id, message.sequence, message.captured_at_unix_ns,
             message.image_width, message.image_height, message.inference_ms,
-            tuple(DetectionBox(box.x, box.y, box.width, box.height, box.confidence) for box in message.boxes),
+            tuple(DetectionBox(box.x, box.y, box.width, box.height, box.confidence, box.track_id) for box in message.boxes),
             message.schema_version,
         )
         if value.schema_version != 2 or not value.source_instance_id:
@@ -88,8 +94,30 @@ def decode_detector_status(payload: bytes) -> dict[str, object]:
 def detection_as_dict(result: DetectionResult) -> dict[str, object]:
     return {
         "schema_version": result.schema_version, "source_instance_id": result.source_instance_id,
+        "tracker_instance_id": result.tracker_instance_id,
         "sequence": result.sequence, "captured_at_unix_ns": result.captured_at_unix_ns,
         "image_width": result.image_width, "image_height": result.image_height,
         "inference_ms": result.inference_ms,
-        "boxes": [{"x": box.x, "y": box.y, "width": box.width, "height": box.height, "confidence": box.confidence} for box in result.boxes],
+        "boxes": [{"x": box.x, "y": box.y, "width": box.width, "height": box.height, "confidence": box.confidence, "track_id": box.track_id} for box in result.boxes],
     }
+
+
+def encode_selected_target(value: SelectedTargetObservation) -> bytes:
+    states = {
+        TrackingState.NO_TARGET: wire.TRACKING_STATE_NO_TARGET,
+        TrackingState.TRACKING: wire.TRACKING_STATE_TRACKING,
+        TrackingState.LOST: wire.TRACKING_STATE_LOST,
+    }
+    return wire.SelectedTargetObservation(
+        schema_version=value.schema_version,
+        source_instance_id=value.source_instance_id,
+        tracker_instance_id=value.tracker_instance_id,
+        sequence=value.sequence,
+        captured_at_unix_ns=value.captured_at_unix_ns,
+        selected_track_id=value.selected_track_id,
+        target_center_x=value.target_center_x,
+        target_center_y=value.target_center_y,
+        image_width=value.image_width,
+        image_height=value.image_height,
+        tracking_state=states[value.tracking_state],
+    ).SerializeToString()

@@ -30,7 +30,7 @@ def test_store_rejects_non_jpeg() -> None:
 
 def test_detection_expires_after_one_second() -> None:
     store = LatestFrameStore()
-    result = DetectionResult("camera", 1, 1, 1280, 720, 5.0, (DetectionBox(1, 2, 3, 4, 0.9),))
+    result = DetectionResult("camera", "", 1, 1, 1280, 720, 5.0, (DetectionBox(1, 2, 3, 4, 0.9),))
     store.update_detection(result, received_at_unix_ns=1_000_000_000)
     assert store.detection(now_unix_ns=1_500_000_000) == result
     assert store.detection(now_unix_ns=2_100_000_000) is None

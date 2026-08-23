@@ -36,7 +36,7 @@ def test_health_works_without_camera() -> None:
 
 def test_detection_websocket_pushes_boxes() -> None:
     store = LatestFrameStore()
-    store.update_detection(DetectionResult("camera", 4, 1, 1280, 720, 8.5, (DetectionBox(1, 2, 30, 40, 0.9),)))
+    store.update_detection(DetectionResult("camera", "", 4, 1, 1280, 720, 8.5, (DetectionBox(1, 2, 30, 40, 0.9),)))
     with TestClient(create_app(store)).websocket_connect("/ws/detections") as socket:
         payload = socket.receive_json()
     assert payload["sequence"] == 4

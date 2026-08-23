@@ -5,15 +5,24 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from pydantic import BaseModel
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from .protocol import detection_as_dict
 from .store import LatestFrameStore
+from .target_manager import TargetManager, TargetSelection, TargetSelectionError
 from .transport import TransportAdapter
 
 BOUNDARY = "frame"
+
+
+class TargetSelectionRequest(BaseModel):
+    source_instance_id: str
+    tracker_instance_id: str
+    sequence: int
+    track_id: int
 
 
 async def mjpeg_chunks(store: LatestFrameStore) -> AsyncIterator[bytes]:
@@ -37,7 +46,11 @@ def create_app(
     *,
     frontend_dir: Path | None = None,
     transport: TransportAdapter | None = None,
+    target_manager: TargetManager | None = None,
 ) -> FastAPI:
+    target_manager = target_manager or TargetManager(
+        lost_after_ms=400, reacquire_timeout_ms=1000, selection_max_age_ms=1000
+    )
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         if transport:
@@ -61,6 +74,42 @@ def create_app(
     @app.get("/api/detector/status")
     def detector_status() -> JSONResponse:
         return JSONResponse(store.detector_status())
+
+    @app.get("/api/faces")
+    def faces() -> JSONResponse:
+        detection = store.detection()
+        payload = detection_as_dict(detection) if detection else {"boxes": []}
+        payload["faces"] = payload.pop("boxes")
+        payload.update(target_manager.snapshot())
+        return JSONResponse(payload)
+
+    @app.get("/api/target")
+    def selected_target() -> JSONResponse:
+        return JSONResponse(target_manager.snapshot())
+
+    @app.put("/api/target")
+    def select_target(request: TargetSelectionRequest) -> JSONResponse:
+        try:
+            observation = target_manager.select(
+                TargetSelection(
+                    request.source_instance_id,
+                    request.tracker_instance_id,
+                    request.sequence,
+                    request.track_id,
+                )
+            )
+        except TargetSelectionError as error:
+            raise HTTPException(status_code=409, detail=str(error)) from error
+        if transport:
+            transport.publish_selected_target(observation)
+        return JSONResponse(target_manager.snapshot())
+
+    @app.delete("/api/target")
+    def clear_target() -> JSONResponse:
+        observation = target_manager.cancel()
+        if transport:
+            transport.publish_selected_target(observation)
+        return JSONResponse(target_manager.snapshot())
 
     @app.get("/api/camera/stream.mjpg")
     async def camera_stream() -> StreamingResponse:
@@ -88,10 +137,12 @@ def create_app(
             while True:
                 detection = await asyncio.to_thread(store.wait_for_detection_after, last_key, 1.0)
                 if detection is None:
-                    await websocket.send_json({"boxes": []})
+                    await websocket.send_json({"boxes": [], **target_manager.snapshot()})
                     continue
                 last_key = (detection.source_instance_id, detection.sequence)
-                await websocket.send_json(detection_as_dict(detection))
+                await websocket.send_json(
+                    {**detection_as_dict(detection), **target_manager.snapshot()}
+                )
         except WebSocketDisconnect:
             return
 

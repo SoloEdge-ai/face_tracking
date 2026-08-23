@@ -41,3 +41,7 @@ hmi:
   port: 8080
   stale_after_ms: 500
   offline_after_ms: 3000
+  target:
+    lost_after_ms: 400
+    reacquire_timeout_ms: 1000
+    selection_max_age_ms: 1000

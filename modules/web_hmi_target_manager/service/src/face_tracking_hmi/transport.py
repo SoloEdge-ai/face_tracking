@@ -1,6 +1,9 @@
 from typing import Protocol
 
+from .domain import SelectedTargetObservation
+
 
 class TransportAdapter(Protocol):
     def start(self) -> None: ...
     def stop(self) -> None: ...
+    def publish_selected_target(self, observation: SelectedTargetObservation) -> None: ...
