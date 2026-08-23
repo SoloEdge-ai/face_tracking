@@ -260,12 +260,13 @@ TEST(Settings, ServoLoadsIndependentAxisLimitsAndKeys) {
               "middleware: {adapter: zenoh, connect: tcp/127.0.0.1:7447, key_prefix: face_tracking}\n"
               "servo: {gpio_chip: 0, frequency_hz: 50, upstream_timeout_ms: 1500, tracking_enabled: true, "
               "pan: {gpio: 17, rated_max_deg: 270, min_deg: 0, max_deg: 270, home_deg: 135, min_pulse_us: 500, max_pulse_us: 2500, invert: false}, "
-              "tilt: {gpio: 27, rated_max_deg: 180, min_deg: 5, max_deg: 45, home_deg: 10, min_pulse_us: 500, max_pulse_us: 2500, invert: false}}\n";
+              "tilt: {gpio: 27, rated_max_deg: 180, min_deg: 15, max_deg: 45, home_deg: 10, min_pulse_us: 500, max_pulse_us: 2500, invert: false}}\n";
   }
   const auto settings = face_tracking::load_servo_process_settings(path);
   std::filesystem::remove(path);
   EXPECT_EQ(settings.servo.pan.gpio, 17);
   EXPECT_FLOAT_EQ(settings.servo.tilt.home_deg, 10.0F);
+  EXPECT_FLOAT_EQ(settings.servo.tilt.min_deg, 15.0F);
   EXPECT_EQ(settings.transport.pan_tilt_commanded_state_key(),
             "face_tracking/pi/pan_tilt/commanded_state");
   EXPECT_EQ(settings.transport.servo_liveliness_key(), "face_tracking/pi/liveliness/servo_driver");

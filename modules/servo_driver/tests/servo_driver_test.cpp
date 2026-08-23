@@ -27,7 +27,7 @@ face_tracking::ServoDriverSettings settings() {
       .tracking_enabled = true,
       .pan = {.gpio = 17, .rated_max_deg = 270, .min_deg = 0, .max_deg = 270,
               .home_deg = 135, .min_pulse_us = 500, .max_pulse_us = 2500},
-      .tilt = {.gpio = 27, .rated_max_deg = 180, .min_deg = 5, .max_deg = 45,
+      .tilt = {.gpio = 27, .rated_max_deg = 180, .min_deg = 15, .max_deg = 45,
                .home_deg = 10, .min_pulse_us = 500, .max_pulse_us = 2500},
   };
 }
@@ -71,6 +71,17 @@ TEST(ServoDriver, HoldsOnlyTheAxisWhoseCandidateWouldExceedItsLimit) {
   EXPECT_FLOAT_EQ(state.commanded_pan_deg, 136);
   EXPECT_FLOAT_EQ(state.commanded_tilt_deg, 44);
   EXPECT_FALSE(state.pan_limit_held);
+  EXPECT_TRUE(state.tilt_limit_held);
+  EXPECT_EQ(state.decision, face_tracking::ServoDecision::held_limit);
+}
+
+TEST(ServoDriver, EntersTiltTrackingRangeFromHomeBeforeApplyingDelta) {
+  FakePwm pwm;
+  face_tracking::servo::ServoDriver driver(settings(), pwm);
+  driver.start(1'100'000'000);
+  const auto& state = driver.process(
+      command(0, -1, face_tracking::ControllerDecision::applied), 1'100'000'001);
+  EXPECT_FLOAT_EQ(state.commanded_tilt_deg, 15);
   EXPECT_TRUE(state.tilt_limit_held);
   EXPECT_EQ(state.decision, face_tracking::ServoDecision::held_limit);
 }

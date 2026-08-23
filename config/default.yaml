@@ -53,7 +53,7 @@ servo:
   tilt:
     gpio: 27
     rated_max_deg: 180
-    min_deg: 5
+    min_deg: 15
     max_deg: 45
     home_deg: 10
     min_pulse_us: 500
