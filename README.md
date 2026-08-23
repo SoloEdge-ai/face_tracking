@@ -1,100 +1,159 @@
 # Face Tracking
 
-Raspberry Pi 5 face-detection pipeline with modular C++ camera and detector processes, a Python/React Web HMI, and a replaceable middleware seam. The default deployment uses Zenoh 1.10; ROS 2 is not a build or runtime dependency.
+面向 Raspberry Pi 5 的模块化人脸跟踪与双轴云台系统。C++ 负责相机采集、人脸检测/短时跟踪、像素中心控制、真实舵机驱动和进程编排；Python/FastAPI + React 仅负责 Web HMI。默认通信中间件为 Zenoh 1.10，业务模块不依赖 Zenoh 或 ROS 2 类型，未来可通过独立 adapter 接入 ROS 2。
 
-## Modules
+![Face Tracking HMI demo](docs/assets/face_tracking_hmi_demo.gif)
 
-- `modules/face_tracking_schemas`: middleware-neutral DTOs, validation, Protobuf v2 schema and codecs.
-- `modules/camera_service`: UVC capture, latest-frame buffering, JPEG encoding and rate limiting.
-- `modules/face_detector_tracker`: OpenCV DNN inference, latest-only scheduling, YOLO post-processing and stable short-term face tracks.
-- `modules/pixel_center_controller`: middleware-neutral target validation and bounded pixel-centering P control.
-- `modules/servo_driver`: middleware-neutral command validation, commanded-angle state machine, soft limits, and the Raspberry Pi kernel hardware-PWM backend.
-- `adapters/zenoh`: Zenoh publishers/subscriber and the C++ process entrypoints.
-- `modules/web_hmi_target_manager`: FastAPI HMI service, transport adapter, and React application.
-- `modules/pan_tilt_bringup`: safe `zenohd` handover and child-process lifecycle.
+## 功能
 
-Business modules do not include Zenoh, Protobuf, or ROS types in their interfaces. A future ROS 2 adapter can translate ROS messages to the same DTOs without changing camera, detector, or HMI state logic.
+- UVC 相机 1280×720 采集，latest-only 队列避免历史帧积压。
+- OpenCV DNN + 固定 640 输入 ONNX 模型检测人脸，并生成短时稳定的 `track_id`。
+- HMI 显示全部人脸；用户可点击画面检测框或列表选择目标，也可随时取消追踪。
+- C++ pixel-center controller 根据目标中心与图像中心的误差输出受限角度增量。
+- C++ servo driver 使用 Raspberry Pi 硬件 PWM 驱动 Pan/Tilt，并维护 HMI 所显示的软件指令角度。
+- Camera、detector、controller、servo driver 和 HMI 由统一 bringup 启动和退出。
 
-## Install and run
+> HMI 中的 Pan/Tilt 是软件最后成功下发的指令值。三线舵机没有位置反馈，因此该数值不代表舵机已经到位。
+
+## 架构
+
+```mermaid
+flowchart LR
+    CAM["camera_service<br/>C++ / UVC"] -->|"JPEG + FrameMetadata v2"| Z["Zenoh adapter"]
+    Z --> DET["face_detector_tracker<br/>C++ / OpenCV DNN"]
+    DET -->|"DetectionResult v2"| HMI["Web HMI + Target Manager<br/>Python / React"]
+    HMI -->|"SelectedTargetObservation v2"| CTRL["pixel_center_controller<br/>C++"]
+    CTRL -->|"PanTiltDelta v2"| SERVO["servo_driver<br/>C++"]
+    SERVO --> PWM["Linux hardware PWM<br/>GPIO18 Pan / GPIO19 Tilt"]
+    SERVO -->|"PanTiltCommandedState v2"| HMI
+```
+
+模块职责：
+
+- `modules/face_tracking_schemas`：中间件无关 DTO、校验、Protobuf v2 schema/codec。
+- `modules/camera_service`：UVC 采集、最新帧槽、JPEG 编码、限频和重连。
+- `modules/face_detector_tracker`：ONNX 推理、YOLO 后处理、NMS 和稳定短时人脸轨迹。
+- `modules/web_hmi_target_manager`：FastAPI 状态/transport、Zenoh adapter 与 React HMI。
+- `modules/pixel_center_controller`：像素误差、死区、P 控制、时效和重复/乱序保护。
+- `modules/servo_driver`：指令校验、角度累计、软限位、硬件 PWM 和 commanded state。
+- `adapters/zenoh`：唯一允许在 C++ 中引用 Zenoh 类型的区域。
+- `modules/pan_tilt_bringup`：启动五个子进程、信号处理和统一退出。
+
+## 硬件连接与安全范围
+
+| 轴 | 舵机 | BCM GPIO | 物理针脚 | 硬件 PWM | 追踪/测试范围 | Home |
+|---|---|---:|---:|---|---:|---:|
+| 下部 Pan | 270°位置舵机 | GPIO18 | Pin 12 | PWM0 channel 2 | 100°–170° | 135° |
+| 上部 Tilt | 180°位置舵机 | GPIO19 | Pin 35 | PWM0 channel 3 | 15°–45° | 20° |
+
+选择 GPIO18/GPIO19 是因为它们在 40-pin header 上分别提供独立硬件 PWM 通道。内核 PWM 外设能够持续输出稳定的 50 Hz 波形，避免此前 GPIO17/GPIO27 用户态软件定时可能引入的脉冲抖动。两针脚不可同时用于 I2S/音频。`setup.sh` 会配置：
+
+```text
+dtoverlay=pwm-2chan,pin=18,func=2,pin2=19,func2=2
+```
+
+两轴使用独立合规的舵机电源并与 Raspberry Pi 共地，不要由 GPIO 给舵机供电。候选角越过软限位时，该轴保持当前角度而非夹紧到边界；另一轴仍可更新。生产安装的两轴追踪增量方向均已反转，但绝对 Home 和 sweep 测试的脉宽映射不受影响。
+
+安全状态机：
+
+- `DEADBAND`、`MISSING_HOLD` 和单次 `STALE`：保持当前角度。
+- 连续缺失第 1–9 个有效检测帧：保持；第 10 帧：`LOST` 并回 Home。
+- 连续 5 秒没有新的有效 `APPLIED`、`DEADBAND` 或 `MISSING_HOLD` 控制数据：回 Home。
+- controller 掉线或用户取消追踪（`NO_TARGET`）：立即回 Home。
+- 超过 1.5 秒的积压运动命令：保持并拒绝，不驱动舵机，也不刷新 5 秒看门狗。
+
+## 安装与启动
+
+目标环境为 Raspberry Pi OS / Debian 12。进入克隆后的仓库根目录执行：
 
 ```bash
-cd /home/friden/Code/face_tracking
 chmod +x setup.sh run.sh
 ./setup.sh
-# Reboot once if setup reports that it added the PWM overlay.
+```
+
+如果 `setup.sh` 新增了 PWM overlay，请先重启 Raspberry Pi。之后启动完整系统：
+
+```bash
 ./run.sh
 ```
 
-Open `http://192.168.50.2:8080`. Set `FACE_TRACKING_CONFIG` to select another YAML profile or `FACE_TRACKING_DEVICE_ID` to override the configured device identifier.
+浏览器访问：
 
-The HMI draws every currently observed face on the live video and lists the same tracks in the side panel. Select a face by clicking its box or list row; use **Cancel tracking** to return to `NO_TARGET`. The first nine consecutive frames without the selected `track_id` enter `MISSING` and hold the current angles. The tenth enters `LOST` and returns to Home; the same track can be reacquired for one second. An empty list is normal when nobody is in view. The displayed Pan/Tilt angles are software-commanded values because the servos have no position feedback.
+```text
+http://<raspberry-pi-host>:8080
+```
 
-`run.sh` does not enable Zenoh on boot. Bringup reuses `zenohd.service`, or interrupts a manual `/usr/bin/zenohd` only when it is owned by the current user. It never stops an unrelated listener and leaves the system router active after application exit.
+页面列出当前检测到的全部人脸。点击检测框或右侧列表开始追踪，点击“取消追踪”立即回 Home。画面中暂时无人时显示 0 张人脸属于正常状态。
 
-## Wire interfaces
-
-Keys remain under `face_tracking/{device_id}`:
-
-- `camera/image`: JPEG payload with Protobuf v2 `FrameMetadata` attachment; drop-old congestion policy.
-- `camera/status`: Protobuf v2 `CameraStatus`.
-- `detections`: Protobuf v2 `DetectionResult`.
-- `diagnostics/detector`: Protobuf v2 `DetectorStatus`.
-- `target/selected`: Protobuf v2 `SelectedTargetObservation` from the HMI target manager.
-- `pan_tilt/delta_cmd`: Protobuf v2 `PanTiltDelta` from the pixel-center controller.
-- `diagnostics/pixel_center_controller`: Protobuf v2 `PixelCenterControllerStatus`.
-- `pan_tilt/commanded_state`: Protobuf v2 `PanTiltCommandedState`, also available through a Zenoh queryable.
-- `liveliness/camera`, `liveliness/detector`, `liveliness/pixel_center_controller`, and `liveliness/servo_driver`: process liveliness tokens.
-
-Every detection includes a tracker-process identity plus a `track_id`; the pair is the stable selection identity. The controller runs at 20 Hz and accepts only fresh `TRACKING` observations. It applies a 30 px horizontal and 24 px vertical deadband, 0.01 degree/px proportional gain, and per-frame limits of 1.5 degrees pan and 1.0 degree tilt. The production camera mount reverses both controller outputs through `reverse_pan_output` and `reverse_tilt_output`; this changes only tracking increments, so the tested Home pulse positions remain Pan 135 degrees / Tilt 20 degrees. MISSING, deadband, duplicate, out-of-order, individual STALE decisions, and commands older than 1.5 seconds hold the current commanded angles. LOST, NO_TARGET, controller liveliness loss, or five seconds without fresh control data return to Home; periodic controller status and stale/rejected commands do not refresh this motion watchdog.
-
-The servo driver uses GPIO18 (physical Pin 12, PWM0 channel 2) for the lower 270-degree Pan servo and GPIO19 (physical Pin 35, PWM0 channel 3) for the upper 180-degree Tilt servo. These pins were chosen because each exposes a separate Raspberry Pi 5 hardware-PWM channel on the 40-pin header. The kernel PWM peripheral therefore maintains the 50 Hz waveform without user-space scheduling jitter, unlike the previous software-timed GPIO17/GPIO27 output. Enable it with `dtoverlay=pwm-2chan,pin=18,func=2,pin2=19,func2=2`; these pins must not simultaneously be assigned to I2S/audio.
-
-Home is Pan 135 degrees / Tilt 20 degrees. Pan has a 100-170 degree tracking and test soft limit; Tilt has a 15-45 degree tracking and test soft limit. A candidate that crosses a limit leaves that axis unchanged instead of saturating it, while the other axis may still move. Both axes default to a nominal 500-2500 microsecond pulse mapping at 50 Hz. Use an independent servo power supply with a common ground, and verify each axis direction with a small unloaded movement before sustained tracking.
-
-With the normal system stopped, the standalone hardware sweep can continuously exercise both servos inside those configured limits. It starts at Home, advances by 1 degree every 50 ms, reverses independently at each endpoint, and releases PWM on Ctrl+C:
+可通过环境变量选择构建目录、配置 profile 或设备 ID：
 
 ```bash
 FACE_TRACKING_BUILD_DIR=build-opencv412 \
-  build-opencv412/bin/face_tracking_servo_sweep_test config/default.yaml 1 50
+FACE_TRACKING_CONFIG=config/default.yaml \
+FACE_TRACKING_DEVICE_ID=pi5 \
+./run.sh
 ```
 
-## Development
+`run.sh` 不会把 Zenoh 设置为开机自启。bringup 会安全复用 `zenohd.service`；只会接管当前用户拥有的手工 `zenohd`，不会停止无关监听器。按 `Ctrl+C` 或发送 `SIGTERM` 会统一停止五个子进程、停止舵机脉冲并释放 PWM。
+
+## 独立舵机测试
+
+必须先停止正式系统，避免 sweep 程序与 servo driver 同时占用 PWM2/PWM3：
 
 ```bash
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
+FACE_TRACKING_BUILD_DIR=build-opencv412 \
+build-opencv412/bin/face_tracking_servo_sweep_test \
+config/default.yaml 1 50
+```
+
+程序从 Home 启动，在两轴配置限位内持续往返；参数 `1 50` 分别表示每步 1°、每 50 ms 更新一次。按 `Ctrl+C` 后停止并释放 PWM。
+
+## 构建与测试
+
+```bash
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --parallel
 ctest --test-dir build --output-on-failure
+
+PYTHONPATH=modules/web_hmi_target_manager/service/src \
 .venv/bin/python -m pytest modules/web_hmi_target_manager/service/tests
-cd modules/web_hmi_target_manager/web && npm run typecheck && npm run build
+
+cd modules/web_hmi_target_manager/web
+npm run typecheck
+npm run build
 ```
 
-With `./run.sh` active, execute the cross-language Zenoh smoke test in another shell:
+运行完整系统后，可在另一个终端执行跨语言 Zenoh 冒烟测试：
 
 ```bash
-FACE_TRACKING_E2E=1 .venv/bin/python -m pytest tests/integration/test_zenoh_v2.py
+FACE_TRACKING_E2E=1 \
+PYTHONPATH=modules/web_hmi_target_manager/service/src \
+.venv/bin/python -m pytest tests/integration/test_zenoh_v2.py
 ```
 
-On the cooled production Pi, add `FACE_TRACKING_PI_PERFORMANCE=1` to enforce the real-time detector gate in the same test.
+## Zenoh 接口
 
-Measure the pinned detector artifact on a representative image with:
+所有 key 均位于 `face_tracking/{device_id}`：
 
-```bash
-build/bin/face_tracking_detector_benchmark \
-  models/yolov8n-face-lindevs.onnx /path/to/image.jpg
-```
+| Key 后缀 | 载荷/用途 |
+|---|---|
+| `camera/image` | JPEG payload + Protobuf v2 `FrameMetadata` attachment；拥塞丢旧帧 |
+| `camera/status` | Protobuf v2 `CameraStatus` |
+| `detections` | Protobuf v2 `DetectionResult`，含 tracker instance 与稳定 `track_id` |
+| `target/selected` | HMI 发布的 Protobuf v2 `SelectedTargetObservation` |
+| `pan_tilt/delta_cmd` | controller 发布的 Protobuf v2 `PanTiltDelta` |
+| `pan_tilt/commanded_state` | servo driver 发布/queryable 的 Protobuf v2 `PanTiltCommandedState` |
+| `diagnostics/detector` | Protobuf v2 `DetectorStatus` |
+| `diagnostics/pixel_center_controller` | Protobuf v2 controller status |
+| `liveliness/{component}` | camera、detector、controller、servo driver 的进程在线状态 |
 
-The committed ONNX artifact is the only detector runtime model. Torch and Ultralytics are not production dependencies.
-The default build pins OpenCV 4.12 because Debian 12's OpenCV 4.6 cannot execute the YOLOv8 detection head. Set `FACE_TRACKING_USE_SYSTEM_OPENCV=ON` only when the system provides OpenCV 4.9 or newer.
+业务模块只使用 DTO 与 typed settings。未来 ROS 2 adapter 应把 ROS message 转为同一组 DTO，不修改相机、检测、控制、舵机或 HMI 业务逻辑，也不进入默认构建依赖。
 
-## Raspberry Pi 5 validation (2026-08-23)
+## 当前实机结果
 
-- Release build: 32/32 CTest cases, 20/20 HMI pytest cases, Ruff, frontend typecheck/build, and `npm audit` all pass.
-- Camera: 1280x720 capture at 29.9 FPS and JPEG publication at 10.0 FPS, with latest-only replacement and no backlog.
-- Cross-language transport: camera, detector, target, controller, status, attachment, and liveliness channels interoperate across C++ and Python.
-- Tracking/control transport: synthetic target selection verifies C++ controller output (`pan +1.0`, `tilt -0.6`) and automatic zero output after the configured freshness limit. The real empty-camera scene remains stable at zero faces, `NO_TARGET`, and safe zero control output.
-- Live-face latency under the thermally limited full-system load measured 380–551 ms from capture to controller decision, so the deployment profile uses a 600 ms freshness limit. Adequate active cooling is still required to restore the 5 FPS detector performance gate and provide latency margin.
-- Process lifecycle: bringup starts camera, detector, controller, servo driver, and HMI together; SIGINT/SIGTERM completes within the bounded shutdown window even with live browser WebSockets.
-- Fixed Lena image: C++ OpenCV DNN produces one box `(212, 187, 144, 202)` at confidence `0.833418`; the former Python/Ultralytics implementation produces `[212.097, 186.852, 356.496, 389.138]` at `0.833417`.
-- Detector benchmark while the CPU is not thermally limited: C++ averages 154-160 ms (6.3-6.5 FPS), versus 442 ms (2.26 FPS) for the former Python implementation. During the same comparison the C++ process used about 354-369% CPU and 126 MiB RSS; Python/Ultralytics used about 107-134% CPU and 846 MiB peak RSS. C++ trades more parallel CPU utilization for 2.8x throughput while reducing memory substantially.
+- Camera：1280×720 约 29.9 FPS 采集、10 FPS JPEG 发布，无历史帧积压。
+- C++ OpenCV DNN：无热限频时约 6.3–6.5 FPS；旧 Python/Ultralytics 约 2.26 FPS。
+- 当前策略回归：全量 CTest 55/55、Python pytest 24/24（另 3 项按环境跳过）、前端 typecheck/build 通过；额外验证了超过 1.5 秒的积压 APPLIED 指令不得移动舵机。
+- Pi 5 持续负载仍需要主动散热；接近固件软温度限制时 detector 可能降至约 3.4–4.3 FPS。
 
-The tested Pi has no registered cooling device. Under a sustained camera + detector + HMI load it reaches the firmware soft-temperature limit (about 80 C; `get_throttled` bit 3), and end-to-end detector throughput falls to 3.4-4.3 FPS. The 5 FPS sustained hardware gate therefore requires adequate Pi 5 active cooling and must be rerun after cooling is installed. The normal integration run verifies transport compatibility; `FACE_TRACKING_PI_PERFORMANCE=1` separately enables the real-time gate so the hardware limitation remains explicit.
+固定 ONNX 模型是唯一检测运行时模型；Torch 与 Ultralytics 不属于生产依赖。默认构建使用 OpenCV 4.12，因为 Debian 12 自带 OpenCV 4.6 无法执行该 YOLOv8 detection head。
