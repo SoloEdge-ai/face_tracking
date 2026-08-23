@@ -1,10 +1,13 @@
 #include "face_tracking/bringup/router_manager.hpp"
 
+#include <algorithm>
 #include <cerrno>
+#include <chrono>
 #include <csignal>
 #include <iostream>
 #include <stdexcept>
 #include <string>
+#include <thread>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -29,7 +32,17 @@ pid_t spawn(const std::vector<std::string>& command) {
 
 void stop_children(const std::vector<pid_t>& children) noexcept {
   for (const auto pid : children) kill(pid, SIGTERM);
-  for (const auto pid : children) {
+  auto remaining = children;
+  const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+  while (!remaining.empty() && std::chrono::steady_clock::now() < deadline) {
+    std::erase_if(remaining, [](pid_t pid) {
+      const pid_t result = waitpid(pid, nullptr, WNOHANG);
+      return result == pid || (result < 0 && errno == ECHILD);
+    });
+    if (!remaining.empty()) std::this_thread::sleep_for(std::chrono::milliseconds(50));
+  }
+  for (const auto pid : remaining) kill(pid, SIGKILL);
+  for (const auto pid : remaining) {
     while (waitpid(pid, nullptr, 0) < 0 && errno == EINTR) {}
   }
 }
