@@ -87,6 +87,41 @@ TEST(Schemas, TrackedDetectionRoundTripsWithProcessIdentity) {
   EXPECT_EQ(decoded.boxes.front().track_id, 42U);
 }
 
+TEST(Schemas, TargetObservationAndControllerOutputRoundTrip) {
+  face_tracking::SelectedTargetObservation observation{
+      .source_instance_id = "camera-a",
+      .tracker_instance_id = "tracker-a",
+      .sequence = 9,
+      .captured_at_unix_ns = 2000000000,
+      .selected_track_id = 42,
+      .target_center_x = 740,
+      .target_center_y = 300,
+      .image_width = 1280,
+      .image_height = 720,
+      .tracking_state = face_tracking::TrackingState::tracking,
+  };
+  const auto decoded_observation = face_tracking::codec::decode_selected_target(
+      face_tracking::codec::encode(observation));
+  EXPECT_EQ(decoded_observation.selected_track_id, 42U);
+  EXPECT_EQ(decoded_observation.tracking_state, face_tracking::TrackingState::tracking);
+
+  face_tracking::PanTiltDelta command{
+      .source_instance_id = "camera-a",
+      .tracker_instance_id = "tracker-a",
+      .sequence = 9,
+      .captured_at_unix_ns = 2000000000,
+      .computed_at_unix_ns = 2100000000,
+      .selected_track_id = 42,
+      .delta_pan_deg = 1.0F,
+      .delta_tilt_deg = -0.6F,
+      .reason = face_tracking::ControllerDecision::applied,
+  };
+  const auto decoded_command = face_tracking::codec::decode_pan_tilt_delta(
+      face_tracking::codec::encode(command));
+  EXPECT_FLOAT_EQ(decoded_command.delta_pan_deg, 1.0F);
+  EXPECT_EQ(decoded_command.reason, face_tracking::ControllerDecision::applied);
+}
+
 TEST(Schemas, PythonGoldenCameraStatusRoundTripsByteForByte) {
   const auto bytes = fixture("camera_status_v2.hex");
   const auto decoded = face_tracking::codec::decode_camera_status(bytes);
@@ -141,4 +176,19 @@ TEST(Settings, DetectorProcessLoadsOnlyItsOwnTypedSection) {
   std::filesystem::remove(path);
   EXPECT_EQ(settings.transport.camera_image_key(), "face_tracking/pi/camera/image");
   EXPECT_EQ(settings.detector.image_size, 640);
+}
+
+TEST(Settings, ControllerLoadsTypedSettingsAndKeys) {
+  const auto path = std::filesystem::temp_directory_path() / "face_tracking_controller_settings_test.yaml";
+  {
+    std::ofstream output(path);
+    output << "common: {device_id: pi}\n"
+              "middleware: {adapter: zenoh, connect: tcp/127.0.0.1:7447, key_prefix: face_tracking}\n"
+              "controller: {control_rate_hz: 20, deadband_x_px: 30, deadband_y_px: 24, kp_pan_deg_per_px: 0.01, kp_tilt_deg_per_px: 0.01, max_pan_step_deg: 1.5, max_tilt_step_deg: 1.0, observation_timeout_ms: 200}\n";
+  }
+  const auto settings = face_tracking::load_controller_process_settings(path);
+  std::filesystem::remove(path);
+  EXPECT_EQ(settings.controller.control_rate_hz, 20);
+  EXPECT_EQ(settings.transport.selected_target_key(), "face_tracking/pi/target/selected");
+  EXPECT_EQ(settings.transport.pan_tilt_delta_key(), "face_tracking/pi/pan_tilt/delta_cmd");
 }
