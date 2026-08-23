@@ -48,6 +48,13 @@ Every detection includes a tracker-process identity plus a `track_id`; the pair 
 
 The servo driver uses GPIO17 for the 270-degree Pan servo and GPIO27 for the 180-degree Tilt servo. Home is Pan 135 degrees / Tilt 20 degrees. Pan is limited to its rated 0-270 degree range; Tilt has a 15-45 degree tracking soft limit. A candidate that crosses a limit leaves that axis unchanged instead of saturating it, while the other axis may still move. Both axes default to a nominal 500-2500 microsecond pulse mapping at 50 Hz. Use an independent servo power supply with a common ground, and verify each axis direction with a small unloaded movement before sustained tracking.
 
+With the normal system stopped, the standalone hardware sweep can continuously exercise both servos inside those configured limits. It starts at Home, advances by 1 degree every 50 ms, reverses independently at each endpoint, and releases PWM on Ctrl+C:
+
+```bash
+FACE_TRACKING_BUILD_DIR=build-opencv412 \
+  build-opencv412/bin/face_tracking_servo_sweep_test config/default.yaml 1 50
+```
+
 ## Development
 
 ```bash
