@@ -121,3 +121,67 @@ def encode_selected_target(value: SelectedTargetObservation) -> bytes:
         image_height=value.image_height,
         tracking_state=states[value.tracking_state],
     ).SerializeToString()
+
+
+def decode_pan_tilt_delta(payload: bytes) -> dict[str, object]:
+    try:
+        message = wire.PanTiltDelta.FromString(payload)
+        if message.schema_version != 2:
+            raise ProtocolError("unsupported controller command version")
+        reasons = {
+            wire.CONTROLLER_DECISION_APPLIED: "APPLIED",
+            wire.CONTROLLER_DECISION_DEADBAND: "DEADBAND",
+            wire.CONTROLLER_DECISION_NO_TARGET: "NO_TARGET",
+            wire.CONTROLLER_DECISION_LOST: "LOST",
+            wire.CONTROLLER_DECISION_STALE: "STALE",
+        }
+        return {
+            "schema_version": message.schema_version,
+            "source_instance_id": message.source_instance_id,
+            "tracker_instance_id": message.tracker_instance_id,
+            "sequence": message.sequence,
+            "captured_at_unix_ns": message.captured_at_unix_ns,
+            "computed_at_unix_ns": message.computed_at_unix_ns,
+            "selected_track_id": message.selected_track_id,
+            "delta_pan_deg": message.delta_pan_deg,
+            "delta_tilt_deg": message.delta_tilt_deg,
+            "reason": reasons.get(message.reason, "UNSPECIFIED"),
+        }
+    except ProtocolError:
+        raise
+    except Exception as exc:
+        raise ProtocolError("invalid controller command protobuf") from exc
+
+
+def decode_controller_status(payload: bytes) -> dict[str, object]:
+    try:
+        message = wire.PixelCenterControllerStatus.FromString(payload)
+        if message.schema_version != 2:
+            raise ProtocolError("unsupported controller status version")
+        states = {
+            wire.PIXEL_CENTER_CONTROLLER_STATE_STARTING: "STARTING",
+            wire.PIXEL_CENTER_CONTROLLER_STATE_ACTIVE: "ACTIVE",
+            wire.PIXEL_CENTER_CONTROLLER_STATE_HOLDING: "HOLDING",
+            wire.PIXEL_CENTER_CONTROLLER_STATE_ERROR: "ERROR",
+            wire.PIXEL_CENTER_CONTROLLER_STATE_STOPPED: "STOPPED",
+        }
+        return {
+            "schema_version": message.schema_version,
+            "state": states.get(message.state, "STARTING"),
+            "observation_age_ms": message.observation_age_ms,
+            "error_x_px": message.error_x_px,
+            "error_y_px": message.error_y_px,
+            "last_delta_pan_deg": message.last_delta_pan_deg,
+            "last_delta_tilt_deg": message.last_delta_tilt_deg,
+            "processed_observations": message.processed_observations,
+            "stale_observations": message.stale_observations,
+            "duplicate_observations": message.duplicate_observations,
+            "out_of_order_observations": message.out_of_order_observations,
+            "last_rejection_reason": message.last_rejection_reason
+            if message.HasField("last_rejection_reason")
+            else None,
+        }
+    except ProtocolError:
+        raise
+    except Exception as exc:
+        raise ProtocolError("invalid controller status protobuf") from exc

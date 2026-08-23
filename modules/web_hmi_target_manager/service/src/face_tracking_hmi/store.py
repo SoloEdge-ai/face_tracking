@@ -24,6 +24,8 @@ class LatestFrameStore:
         self._driver_status: dict[str, object] = {}
         self._detector_status: dict[str, object] = {}
         self._detection: StoredDetection | None = None
+        self._controller_status: dict[str, object] = {}
+        self._controller_command: dict[str, object] = {}
         self._stale_after_ms, self._offline_after_ms = stale_after_ms, offline_after_ms
 
     def update(self, jpeg: bytes, metadata: FrameMetadata, *, received_at_unix_ns: int | None = None) -> bool:
@@ -56,6 +58,21 @@ class LatestFrameStore:
     def detector_status(self) -> dict[str, object]:
         with self._condition:
             return dict(self._detector_status)
+
+    def update_controller_status(self, status: dict[str, object]) -> None:
+        with self._condition:
+            self._controller_status = dict(status)
+
+    def update_controller_command(self, command: dict[str, object]) -> None:
+        with self._condition:
+            self._controller_command = dict(command)
+
+    def controller_snapshot(self) -> dict[str, object]:
+        with self._condition:
+            return {
+                "status": dict(self._controller_status),
+                "command": dict(self._controller_command),
+            }
 
     def detection(self, *, now_unix_ns: int | None = None) -> DetectionResult | None:
         now = now_unix_ns or time.time_ns()

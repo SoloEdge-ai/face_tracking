@@ -11,6 +11,8 @@ from .protocol import (
     decode_detection,
     decode_detector_status,
     decode_frame_metadata,
+    decode_controller_status,
+    decode_pan_tilt_delta,
     encode_selected_target,
 )
 from .store import LatestFrameStore
@@ -84,12 +86,35 @@ class ZenohTransport:
                 except (ProtocolError, TypeError, ValueError):
                     self._store.reject_invalid_frame()
 
+            def on_controller_delta(sample: object) -> None:
+                try:
+                    self._store.update_controller_command(
+                        decode_pan_tilt_delta(bytes(getattr(sample, "payload")))
+                    )
+                except (ProtocolError, TypeError, ValueError):
+                    self._store.reject_invalid_frame()
+
+            def on_controller_status(sample: object) -> None:
+                try:
+                    self._store.update_controller_status(
+                        decode_controller_status(bytes(getattr(sample, "payload")))
+                    )
+                except (ProtocolError, TypeError, ValueError):
+                    self._store.reject_invalid_frame()
+
             declarations = [
                 session.declare_subscriber(self._settings.key("camera/image"), on_frame),
                 session.declare_subscriber(self._settings.key("camera/status"), on_status),
                 session.declare_subscriber(self._settings.key("detections"), on_detection),
                 session.declare_subscriber(
                     self._settings.key("diagnostics/detector"), on_detector_status
+                ),
+                session.declare_subscriber(
+                    self._settings.key("pan_tilt/delta_cmd"), on_controller_delta
+                ),
+                session.declare_subscriber(
+                    self._settings.key("diagnostics/pixel_center_controller"),
+                    on_controller_status,
                 ),
             ]
             while not self._stop.wait(0.05):

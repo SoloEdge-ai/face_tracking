@@ -75,6 +75,10 @@ def create_app(
     def detector_status() -> JSONResponse:
         return JSONResponse(store.detector_status())
 
+    @app.get("/api/controller/status")
+    def controller_status() -> JSONResponse:
+        return JSONResponse(store.controller_snapshot())
+
     @app.get("/api/faces")
     def faces() -> JSONResponse:
         detection = store.detection()
@@ -143,6 +147,16 @@ def create_app(
                 await websocket.send_json(
                     {**detection_as_dict(detection), **target_manager.snapshot()}
                 )
+        except WebSocketDisconnect:
+            return
+
+    @app.websocket("/ws/controller")
+    async def controller_socket(websocket: WebSocket) -> None:
+        await websocket.accept()
+        try:
+            while True:
+                await websocket.send_json(store.controller_snapshot())
+                await asyncio.sleep(0.2)
         except WebSocketDisconnect:
             return
 
