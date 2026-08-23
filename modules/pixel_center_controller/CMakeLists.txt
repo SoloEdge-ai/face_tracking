@@ -1,6 +1,12 @@
+add_library(pixel_center_controller src/pixel_center_controller.cpp)
+add_library(face_tracking::controller ALIAS pixel_center_controller)
+target_include_directories(pixel_center_controller PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
+target_link_libraries(pixel_center_controller PUBLIC face_tracking::schemas Threads::Threads)
+target_compile_options(pixel_center_controller PRIVATE -Wall -Wextra -Wpedantic)
+
 if(FACE_TRACKING_BUILD_TESTS)
   add_executable(pixel_center_controller_tests tests/pixel_center_controller_test.cpp)
-  target_link_libraries(pixel_center_controller_tests PRIVATE face_tracking::schemas GTest::gtest_main)
+  target_link_libraries(pixel_center_controller_tests PRIVATE face_tracking::controller GTest::gtest_main)
   include(GoogleTest)
   gtest_discover_tests(pixel_center_controller_tests)
 endif()
