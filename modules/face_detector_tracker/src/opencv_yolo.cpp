@@ -24,25 +24,28 @@ OpenCvYoloEngine::OpenCvYoloEngine(const DetectorSettings& settings)
 
 OpenCvYoloEngine::~OpenCvYoloEngine() = default;
 
-std::vector<DetectionBox> OpenCvYoloEngine::infer(const cv::Mat& image) {
-  const int input_size = implementation_->settings.image_size;
-  const float scale = std::min(static_cast<float>(input_size) / image.cols, static_cast<float>(input_size) / image.rows);
-  const int resized_width = static_cast<int>(std::round(image.cols * scale));
-  const int resized_height = static_cast<int>(std::round(image.rows * scale));
+LetterboxTransform calculate_letterbox(int image_width, int image_height, int input_size) {
+  if (image_width <= 0 || image_height <= 0 || input_size <= 0) {
+    throw std::invalid_argument("letterbox dimensions must be positive");
+  }
+  const float scale = std::min(static_cast<float>(input_size) / image_width,
+                               static_cast<float>(input_size) / image_height);
+  const int resized_width = static_cast<int>(std::round(image_width * scale));
+  const int resized_height = static_cast<int>(std::round(image_height * scale));
   const int pad_x = (input_size - resized_width) / 2;
   const int pad_y = (input_size - resized_height) / 2;
-  cv::Mat resized;
-  cv::resize(image, resized, {resized_width, resized_height});
-  cv::Mat letterboxed(input_size, input_size, CV_8UC3, cv::Scalar(114, 114, 114));
-  resized.copyTo(letterboxed(cv::Rect(pad_x, pad_y, resized_width, resized_height)));
+  return {.scale = scale, .resized_width = resized_width, .resized_height = resized_height, .pad_x = pad_x, .pad_y = pad_y};
+}
 
-  auto blob = cv::dnn::blobFromImage(letterboxed, 1.0 / 255.0, {input_size, input_size}, {}, true, false, CV_32F);
-  implementation_->net.setInput(blob);
-  std::vector<cv::Mat> outputs;
-  implementation_->net.forward(outputs, implementation_->net.getUnconnectedOutLayersNames());
-  if (outputs.empty() || outputs.front().empty()) throw std::runtime_error("YOLO returned no output");
+std::vector<DetectionBox> postprocess_yolo(
+    const cv::Mat& raw, int image_width, int image_height, const LetterboxTransform& transform,
+    float confidence_threshold, float iou_threshold) {
+  if (raw.empty()) throw std::runtime_error("YOLO returned no output");
+  const float scale = transform.scale;
+  const int pad_x = transform.pad_x;
+  const int pad_y = transform.pad_y;
+  if (scale <= 0) throw std::invalid_argument("invalid letterbox scale");
 
-  const cv::Mat& raw = outputs.front();
   cv::Mat rows;
   if (raw.dims == 3) {
     const int channels = raw.size[1];
@@ -62,20 +65,20 @@ std::vector<DetectionBox> OpenCvYoloEngine::infer(const cv::Mat& image) {
     const float* values = rows.ptr<float>(index);
     float confidence = values[4];
     for (int column = 5; column < rows.cols; ++column) confidence = std::max(confidence, values[column]);
-    if (confidence < implementation_->settings.confidence) continue;
+    if (confidence < confidence_threshold) continue;
     const float x1 = (values[0] - values[2] / 2.0F - pad_x) / scale;
     const float y1 = (values[1] - values[3] / 2.0F - pad_y) / scale;
     const float width = values[2] / scale;
     const float height = values[3] / scale;
-    const int left = std::clamp(static_cast<int>(std::round(x1)), 0, image.cols - 1);
-    const int top = std::clamp(static_cast<int>(std::round(y1)), 0, image.rows - 1);
-    const int right = std::clamp(static_cast<int>(std::round(x1 + width)), left + 1, image.cols);
-    const int bottom = std::clamp(static_cast<int>(std::round(y1 + height)), top + 1, image.rows);
+    const int left = std::clamp(static_cast<int>(std::round(x1)), 0, image_width - 1);
+    const int top = std::clamp(static_cast<int>(std::round(y1)), 0, image_height - 1);
+    const int right = std::clamp(static_cast<int>(std::round(x1 + width)), left + 1, image_width);
+    const int bottom = std::clamp(static_cast<int>(std::round(y1 + height)), top + 1, image_height);
     candidates.emplace_back(left, top, right - left, bottom - top);
     scores.push_back(confidence);
   }
   std::vector<int> kept;
-  cv::dnn::NMSBoxes(candidates, scores, implementation_->settings.confidence, implementation_->settings.iou, kept);
+  cv::dnn::NMSBoxes(candidates, scores, confidence_threshold, iou_threshold, kept);
   std::vector<DetectionBox> result;
   result.reserve(kept.size());
   for (const int index : kept) {
@@ -83,6 +86,23 @@ std::vector<DetectionBox> OpenCvYoloEngine::infer(const cv::Mat& image) {
     result.push_back({static_cast<float>(box.x), static_cast<float>(box.y), static_cast<float>(box.width), static_cast<float>(box.height), scores.at(index)});
   }
   return result;
+}
+
+std::vector<DetectionBox> OpenCvYoloEngine::infer(const cv::Mat& image) {
+  const int input_size = implementation_->settings.image_size;
+  const auto transform = calculate_letterbox(image.cols, image.rows, input_size);
+  cv::Mat resized;
+  cv::resize(image, resized, {transform.resized_width, transform.resized_height});
+  cv::Mat letterboxed(input_size, input_size, CV_8UC3, cv::Scalar(114, 114, 114));
+  resized.copyTo(letterboxed(cv::Rect(transform.pad_x, transform.pad_y, transform.resized_width, transform.resized_height)));
+
+  auto blob = cv::dnn::blobFromImage(letterboxed, 1.0 / 255.0, {input_size, input_size}, {}, true, false, CV_32F);
+  implementation_->net.setInput(blob);
+  std::vector<cv::Mat> outputs;
+  implementation_->net.forward(outputs, implementation_->net.getUnconnectedOutLayersNames());
+  if (outputs.empty()) throw std::runtime_error("YOLO returned no output");
+  return postprocess_yolo(outputs.front(), image.cols, image.rows, transform,
+                          implementation_->settings.confidence, implementation_->settings.iou);
 }
 
 }  // namespace face_tracking::detector::internal

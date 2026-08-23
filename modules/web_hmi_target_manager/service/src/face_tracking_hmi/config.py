@@ -32,8 +32,6 @@ def load_settings(path: str | Path | None = None) -> Settings:
         key_prefix=middleware["key_prefix"], host=hmi["host"], port=hmi["port"],
         stale_after_ms=hmi["stale_after_ms"], offline_after_ms=hmi["offline_after_ms"],
     )
-    if settings.adapter != "zenoh":
-        raise ValueError("only the zenoh adapter is available in this release")
     if not settings.device_id or not settings.connect or not settings.key_prefix:
         raise ValueError("invalid common or middleware configuration")
     if settings.port <= 0 or settings.stale_after_ms <= 0 or settings.offline_after_ms <= settings.stale_after_ms:

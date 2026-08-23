@@ -104,8 +104,11 @@ void DetectorService::Implementation::run(std::stop_token stop_token) {
   while (!stop_token.stop_requested()) {
     const auto now = std::chrono::steady_clock::now();
     try {
-      if (loop.due(now)) loop.process_if_due(slot.take(), now);
-      if (state == DetectorState::error) { state = DetectorState::streaming; last_error.reset(); }
+      const bool processed = loop.due(now) && loop.process_if_due(slot.take(), now);
+      if (processed && state == DetectorState::error) {
+        state = DetectorState::streaming;
+        last_error.reset();
+      }
     } catch (const std::exception& error) {
       state = DetectorState::error;
       last_error = error.what();

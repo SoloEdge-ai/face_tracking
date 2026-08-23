@@ -5,13 +5,15 @@ import uvicorn
 from .app import create_app
 from .config import load_settings
 from .store import LatestFrameStore
-from .transport import create_transport
+from .zenoh_adapter import ZenohTransport
 
 
 def main() -> None:
     settings = load_settings()
     store = LatestFrameStore(stale_after_ms=settings.stale_after_ms, offline_after_ms=settings.offline_after_ms)
-    transport = create_transport(settings, store)
+    if settings.adapter != "zenoh":
+        raise RuntimeError(f"HMI executable does not provide adapter: {settings.adapter}")
+    transport = ZenohTransport(settings, store)
     frontend_dir = Path(__file__).resolve().parents[3] / "web" / "dist"
     uvicorn.run(
         create_app(store, frontend_dir=frontend_dir, transport=transport),

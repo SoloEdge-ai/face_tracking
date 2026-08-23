@@ -2,6 +2,7 @@
 
 #include <chrono>
 #include <cstdint>
+#include <functional>
 #include <mutex>
 #include <optional>
 #include <string>
@@ -50,6 +51,23 @@ class PublishGate {
   std::uint64_t published_frames_{};
 };
 
+class CameraDevice {
+ public:
+  virtual ~CameraDevice() = default;
+  [[nodiscard]] virtual bool is_open() const = 0;
+  virtual bool open(const std::string& path) = 0;
+  virtual void configure(const CameraSettings& settings) = 0;
+  virtual bool read(cv::Mat& frame) = 0;
+  virtual void release() = 0;
+};
+
+using CameraStateHandler =
+    std::function<void(CameraState, std::optional<std::string>)>;
+
+bool capture_once(CameraDevice& device, const CameraSettings& settings, LatestFrameSlot& slot,
+                  const CameraStateHandler& set_state, std::int64_t captured_at_unix_ns);
+
 std::string make_instance_id();
+void recover_jpeg_error(CameraState& state, std::optional<std::string>& last_error);
 
 }  // namespace face_tracking::camera::internal

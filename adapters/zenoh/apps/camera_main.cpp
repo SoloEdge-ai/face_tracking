@@ -3,6 +3,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <iostream>
+#include <stdexcept>
 #include <stop_token>
 #include <thread>
 
@@ -21,8 +22,9 @@ int main() {
     std::signal(SIGINT, stop);
     std::signal(SIGTERM, stop);
     const char* configured = std::getenv("FACE_TRACKING_CONFIG");
-    const auto settings = face_tracking::load_settings(configured ? configured : "config/default.yaml");
-    face_tracking::zenoh_adapter::CameraOutput output(settings);
+    const auto settings = face_tracking::load_camera_process_settings(configured ? configured : "config/default.yaml");
+    if (settings.transport.middleware.adapter != "zenoh") throw std::runtime_error("camera Zenoh executable requires middleware.adapter=zenoh");
+    face_tracking::zenoh_adapter::CameraOutput output(settings.transport);
     face_tracking::camera::CameraService service(settings.camera, output);
     std::jthread signal_monitor([&source](std::stop_token token) {
       while (!token.stop_requested() && !interrupted) std::this_thread::sleep_for(std::chrono::milliseconds(20));

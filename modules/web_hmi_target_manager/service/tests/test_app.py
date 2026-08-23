@@ -1,4 +1,5 @@
-from face_tracking_hmi.app import create_app
+import pytest
+from face_tracking_hmi.app import create_app, mjpeg_chunks
 from face_tracking_hmi.domain import DetectionBox, DetectionResult, FrameMetadata
 from face_tracking_hmi.store import LatestFrameStore
 from fastapi.testclient import TestClient
@@ -44,3 +45,16 @@ def test_transport_follows_application_lifespan() -> None:
         assert transport.started
         assert not transport.stopped
     assert transport.stopped
+
+
+@pytest.mark.asyncio
+async def test_mjpeg_stream_contains_latest_frame_headers_and_payload() -> None:
+    store = LatestFrameStore()
+    jpeg = b"\xff\xd8jpeg\xff\xd9"
+    store.update(jpeg, FrameMetadata("camera", 9, 1, 1280, 720, "MJPG", 80))
+    stream = mjpeg_chunks(store)
+    chunk = await anext(stream)
+    await stream.aclose()
+    assert b"Content-Type: image/jpeg" in chunk
+    assert b"X-Frame-Sequence: 9" in chunk
+    assert jpeg in chunk

@@ -2,6 +2,7 @@ from pathlib import Path
 
 from face_tracking_hmi.generated import face_tracking_v2_pb2 as wire
 from face_tracking_hmi.protocol import (
+    decode_camera_status,
     decode_detection,
     decode_detector_status,
     decode_frame_metadata,
@@ -23,10 +24,80 @@ def test_detection_protobuf_decodes() -> None:
 
 def test_cpp_golden_fixtures_decode() -> None:
     fixtures = Path(__file__).parents[4] / "tests" / "integration" / "fixtures"
-    frame = decode_frame_metadata(bytes.fromhex((fixtures / "frame_metadata_v2.hex").read_text().strip()))
-    detection = decode_detection(bytes.fromhex((fixtures / "detection_result_v2.hex").read_text().strip()))
+    frame_bytes = bytes.fromhex((fixtures / "frame_metadata_v2.hex").read_text().strip())
+    detection_bytes = bytes.fromhex((fixtures / "detection_result_v2.hex").read_text().strip())
+    camera_bytes = bytes.fromhex((fixtures / "camera_status_v2.hex").read_text().strip())
+    detector_bytes = bytes.fromhex((fixtures / "detector_status_v2.hex").read_text().strip())
+    frame = decode_frame_metadata(frame_bytes)
+    detection = decode_detection(detection_bytes)
+    camera = decode_camera_status(camera_bytes)
+    detector = decode_detector_status(detector_bytes)
     assert frame.source_instance_id == "camera-a"
+    assert frame.sequence == 7
+    assert frame.captured_at_unix_ns == 123456
+    assert frame.width == 1280 and frame.height == 720
+    assert frame.capture_format == "MJPG" and frame.jpeg_quality == 80
     assert detection.boxes[0].confidence == 0.75
+    assert detection.inference_ms == 12.5
+    assert camera == {
+        "schema_version": 2,
+        "state": "STREAMING",
+        "capture_fps": 29.5,
+        "publish_fps": 9.75,
+        "captured_frames": 100,
+        "published_frames": 33,
+        "dropped_frames": 67,
+        "device_path": "/dev/video0",
+        "last_error": None,
+    }
+    assert detector["state"] == "ERROR"
+    assert detector["inference_fps"] == 4.25
+    assert detector["last_error"] == "boom"
+
+    frame_wire = wire.FrameMetadata(
+        schema_version=2,
+        source_instance_id="camera-a",
+        sequence=7,
+        captured_at_unix_ns=123456,
+        width=1280,
+        height=720,
+        capture_format="MJPG",
+        jpeg_quality=80,
+    )
+    detection_wire = wire.DetectionResult(
+        schema_version=2,
+        source_instance_id="camera-a",
+        sequence=7,
+        captured_at_unix_ns=123456,
+        image_width=1280,
+        image_height=720,
+        inference_ms=12.5,
+    )
+    detection_wire.boxes.add(x=1, y=2, width=3, height=4, confidence=0.75)
+    camera_wire = wire.CameraStatus(
+        schema_version=2,
+        state=wire.CAMERA_STATE_STREAMING,
+        capture_fps=29.5,
+        publish_fps=9.75,
+        captured_frames=100,
+        published_frames=33,
+        dropped_frames=67,
+        device_path="/dev/video0",
+    )
+    detector_wire = wire.DetectorStatus(
+        schema_version=2,
+        state=wire.DETECTOR_STATE_ERROR,
+        inference_fps=4.25,
+        processed_frames=20,
+        dropped_frames=10,
+        decode_errors=2,
+        inference_errors=1,
+        last_error="boom",
+    )
+    assert frame_wire.SerializeToString() == frame_bytes
+    assert detection_wire.SerializeToString() == detection_bytes
+    assert camera_wire.SerializeToString() == camera_bytes
+    assert detector_wire.SerializeToString() == detector_bytes
 
 
 def test_detector_status_protobuf_decodes() -> None:

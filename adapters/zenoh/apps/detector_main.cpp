@@ -2,6 +2,7 @@
 #include <csignal>
 #include <cstdlib>
 #include <iostream>
+#include <stdexcept>
 #include <stop_token>
 #include <thread>
 
@@ -20,8 +21,9 @@ int main() {
     std::signal(SIGINT, stop);
     std::signal(SIGTERM, stop);
     const char* configured = std::getenv("FACE_TRACKING_CONFIG");
-    const auto settings = face_tracking::load_settings(configured ? configured : "config/default.yaml");
-    face_tracking::zenoh_adapter::DetectorTransport transport(settings);
+    const auto settings = face_tracking::load_detector_process_settings(configured ? configured : "config/default.yaml");
+    if (settings.transport.middleware.adapter != "zenoh") throw std::runtime_error("detector Zenoh executable requires middleware.adapter=zenoh");
+    face_tracking::zenoh_adapter::DetectorTransport transport(settings.transport);
     face_tracking::detector::DetectorService service(settings.detector, transport);
     std::jthread signal_monitor([&source](std::stop_token token) {
       while (!token.stop_requested() && !interrupted) std::this_thread::sleep_for(std::chrono::milliseconds(20));

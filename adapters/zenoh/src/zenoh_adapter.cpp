@@ -22,7 +22,7 @@ zenoh::Bytes bytes(std::vector<std::uint8_t> value) { return zenoh::Bytes(std::m
 }
 
 struct CameraOutput::Implementation {
-  explicit Implementation(const Settings& settings)
+  explicit Implementation(const TransportSettings& settings)
       : session(open_session(settings.middleware)),
         image(session.declare_publisher(zenoh::KeyExpr(settings.camera_image_key()), [] {
           zenoh::Session::PublisherOptions options;
@@ -44,7 +44,7 @@ struct CameraOutput::Implementation {
   zenoh::LivelinessToken liveliness;
 };
 
-CameraOutput::CameraOutput(const Settings& settings) : implementation_(std::make_unique<Implementation>(settings)) {}
+CameraOutput::CameraOutput(const TransportSettings& settings) : implementation_(std::make_unique<Implementation>(settings)) {}
 CameraOutput::~CameraOutput() = default;
 
 void CameraOutput::publish_frame(const FrameEvent& frame) {
@@ -58,7 +58,7 @@ void CameraOutput::publish_status(const CameraStatus& status) {
 }
 
 struct DetectorTransport::Implementation {
-  explicit Implementation(const Settings& settings)
+  explicit Implementation(const TransportSettings& settings)
       : settings(settings),
         session(open_session(settings.middleware)),
         detection(session.declare_publisher(zenoh::KeyExpr(settings.detections_key()), [] {
@@ -73,7 +73,7 @@ struct DetectorTransport::Implementation {
         }())),
         liveliness(session.liveliness_declare_token(zenoh::KeyExpr(settings.detector_liveliness_key()))) {}
 
-  Settings settings;
+  TransportSettings settings;
   zenoh::Session session;
   zenoh::Publisher detection;
   zenoh::Publisher status;
@@ -83,7 +83,7 @@ struct DetectorTransport::Implementation {
   detector::TransportPort::FrameHandler handler;
 };
 
-DetectorTransport::DetectorTransport(const Settings& settings) : implementation_(std::make_unique<Implementation>(settings)) {}
+DetectorTransport::DetectorTransport(const TransportSettings& settings) : implementation_(std::make_unique<Implementation>(settings)) {}
 DetectorTransport::~DetectorTransport() = default;
 
 void DetectorTransport::start(FrameHandler handler) {

@@ -38,12 +38,9 @@ struct HmiSettings {
   int offline_after_ms{};
 };
 
-struct Settings {
+struct TransportSettings {
   std::string device_id;
   MiddlewareSettings middleware;
-  CameraSettings camera;
-  DetectorSettings detector;
-  HmiSettings hmi;
 
   [[nodiscard]] std::string key(std::string_view suffix) const;
   [[nodiscard]] std::string camera_image_key() const;
@@ -54,6 +51,17 @@ struct Settings {
   [[nodiscard]] std::string detector_liveliness_key() const;
 };
 
-Settings load_settings(const std::filesystem::path& path);
+struct CameraProcessSettings {
+  TransportSettings transport;
+  CameraSettings camera;
+};
+
+struct DetectorProcessSettings {
+  TransportSettings transport;
+  DetectorSettings detector;
+};
+
+CameraProcessSettings load_camera_process_settings(const std::filesystem::path& path);
+DetectorProcessSettings load_detector_process_settings(const std::filesystem::path& path);
 
 }  // namespace face_tracking

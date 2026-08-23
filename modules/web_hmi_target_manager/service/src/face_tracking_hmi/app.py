@@ -16,6 +16,22 @@ from .transport import TransportAdapter
 BOUNDARY = "frame"
 
 
+async def mjpeg_chunks(store: LatestFrameStore) -> AsyncIterator[bytes]:
+    last_key: tuple[str, int] | None = None
+    while True:
+        frame = await asyncio.to_thread(store.wait_for_after, last_key, 1.0)
+        if frame is None:
+            continue
+        last_key = (frame.metadata.source_instance_id, frame.metadata.sequence)
+        headers = (
+            f"--{BOUNDARY}\r\n"
+            "Content-Type: image/jpeg\r\n"
+            f"Content-Length: {len(frame.jpeg)}\r\n"
+            f"X-Frame-Sequence: {frame.metadata.sequence}\r\n\r\n"
+        ).encode("ascii")
+        yield headers + frame.jpeg + b"\r\n"
+
+
 def create_app(
     store: LatestFrameStore,
     *,
@@ -48,16 +64,11 @@ def create_app(
 
     @app.get("/api/camera/stream.mjpg")
     async def camera_stream() -> StreamingResponse:
-        async def generate() -> AsyncIterator[bytes]:
-            last_key: tuple[str, int] | None = None
-            while True:
-                frame = await asyncio.to_thread(store.wait_for_after, last_key, 1.0)
-                if frame is None:
-                    continue
-                last_key = (frame.metadata.source_instance_id, frame.metadata.sequence)
-                headers = (f"--{BOUNDARY}\r\nContent-Type: image/jpeg\r\nContent-Length: {len(frame.jpeg)}\r\nX-Frame-Sequence: {frame.metadata.sequence}\r\n\r\n").encode("ascii")
-                yield headers + frame.jpeg + b"\r\n"
-        return StreamingResponse(generate(), media_type=f"multipart/x-mixed-replace; boundary={BOUNDARY}", headers={"Cache-Control": "no-store"})
+        return StreamingResponse(
+            mjpeg_chunks(store),
+            media_type=f"multipart/x-mixed-replace; boundary={BOUNDARY}",
+            headers={"Cache-Control": "no-store"},
+        )
 
     @app.websocket("/ws/status")
     async def status_socket(websocket: WebSocket) -> None:

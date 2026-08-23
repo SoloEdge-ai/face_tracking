@@ -23,6 +23,8 @@ def test_cpp_publishers_are_python_decodable() -> None:
         "camera": [],
         "detections": [],
         "detector": [],
+        "camera_liveliness": [],
+        "detector_liveliness": [],
     }
     condition = threading.Condition()
 
@@ -32,6 +34,14 @@ def test_cpp_publishers_are_python_decodable() -> None:
             message = decoder.FromString(bytes(source))  # type: ignore[attr-defined]
             with condition:
                 received[name].append(message)
+                condition.notify_all()
+
+        return callback
+
+    def record_liveliness(name: str):
+        def callback(sample: object) -> None:
+            with condition:
+                received[name].append(sample)
                 condition.notify_all()
 
         return callback
@@ -53,6 +63,16 @@ def test_cpp_publishers_are_python_decodable() -> None:
             session.declare_subscriber(
                 f"{prefix}/diagnostics/detector", record("detector", wire.DetectorStatus)
             ),
+            session.liveliness().declare_subscriber(
+                f"{prefix}/liveliness/camera",
+                record_liveliness("camera_liveliness"),
+                history=True,
+            ),
+            session.liveliness().declare_subscriber(
+                f"{prefix}/liveliness/detector",
+                record_liveliness("detector_liveliness"),
+                history=True,
+            ),
         ]
         deadline = time.monotonic() + 20
         with condition:
@@ -66,7 +86,12 @@ def test_cpp_publishers_are_python_decodable() -> None:
             subscriber.undeclare()
 
     assert all(received.values()), {name: len(values) for name, values in received.items()}
-    assert all(message.schema_version == 2 for values in received.values() for message in values)
+    wire_channels = ("frames", "camera", "detections", "detector")
+    assert all(
+        message.schema_version == 2
+        for name in wire_channels
+        for message in received[name]
+    )
     assert received["frames"][-1].source_instance_id
     assert received["camera"][-1].publish_fps <= 11.5
     if os.environ.get("FACE_TRACKING_PI_PERFORMANCE") == "1":

@@ -4,7 +4,6 @@
 #include <algorithm>
 #include <array>
 #include <iomanip>
-#include <iostream>
 #include <random>
 #include <sstream>
 #include <thread>
@@ -17,6 +16,25 @@ namespace {
 std::int64_t unix_now_ns() {
   return std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
 }
+
+class OpenCvCameraDevice final : public internal::CameraDevice {
+ public:
+  [[nodiscard]] bool is_open() const override { return camera_.isOpened(); }
+  bool open(const std::string& path) override { return camera_.open(path, cv::CAP_V4L2); }
+  void configure(const CameraSettings& settings) override {
+    camera_.set(cv::CAP_PROP_FOURCC, cv::VideoWriter::fourcc('M', 'J', 'P', 'G'));
+    camera_.set(cv::CAP_PROP_FRAME_WIDTH, settings.width);
+    camera_.set(cv::CAP_PROP_FRAME_HEIGHT, settings.height);
+    camera_.set(cv::CAP_PROP_FPS, settings.capture_fps);
+  }
+  bool read(cv::Mat& frame) override {
+    return camera_.grab() && camera_.retrieve(frame) && !frame.empty();
+  }
+  void release() override { camera_.release(); }
+
+ private:
+  cv::VideoCapture camera_;
+};
 }
 
 void internal::LatestFrameSlot::update(cv::Mat bgr, std::int64_t captured_at_unix_ns) {
@@ -34,6 +52,27 @@ std::optional<internal::CapturedFrame> internal::LatestFrameSlot::snapshot() con
 std::uint64_t internal::LatestFrameSlot::captured_frames() const {
   std::lock_guard lock(mutex_);
   return captured_frames_;
+}
+
+bool internal::capture_once(CameraDevice& device, const CameraSettings& settings,
+                            LatestFrameSlot& slot, const CameraStateHandler& set_state,
+                            std::int64_t captured_at_unix_ns) {
+  if (!device.is_open()) {
+    if (!device.open(settings.device_path)) {
+      set_state(CameraState::reconnecting, "cannot open camera " + settings.device_path);
+      return false;
+    }
+    device.configure(settings);
+    set_state(CameraState::streaming, std::nullopt);
+  }
+  cv::Mat frame;
+  if (!device.read(frame)) {
+    set_state(CameraState::error, "camera capture failed");
+    device.release();
+    return false;
+  }
+  slot.update(std::move(frame), captured_at_unix_ns);
+  return true;
 }
 
 internal::PublishGate::PublishGate(OutputPort& output, std::string source_instance_id, const CameraSettings& settings)
@@ -69,6 +108,13 @@ std::string internal::make_instance_id() {
   return output.str();
 }
 
+void internal::recover_jpeg_error(CameraState& state, std::optional<std::string>& last_error) {
+  if (last_error == "JPEG encoding failed") {
+    state = CameraState::streaming;
+    last_error.reset();
+  }
+}
+
 struct CameraService::Implementation {
   Implementation(CameraSettings value, OutputPort& output)
       : settings(std::move(value)), output(output), gate(output, internal::make_instance_id(), settings) {}
@@ -102,31 +148,16 @@ void CameraService::Implementation::set_state(CameraState value, std::optional<s
 }
 
 void CameraService::Implementation::capture(std::stop_token stop_token) {
-  cv::VideoCapture camera;
+  OpenCvCameraDevice camera;
   while (!stop_token.stop_requested()) {
-    if (!camera.isOpened()) {
-      camera.open(settings.device_path, cv::CAP_V4L2);
-      camera.set(cv::CAP_PROP_FOURCC, cv::VideoWriter::fourcc('M', 'J', 'P', 'G'));
-      camera.set(cv::CAP_PROP_FRAME_WIDTH, settings.width);
-      camera.set(cv::CAP_PROP_FRAME_HEIGHT, settings.height);
-      camera.set(cv::CAP_PROP_FPS, settings.capture_fps);
-      if (!camera.isOpened()) {
-        const std::string error = "cannot open camera " + settings.device_path;
-        std::cerr << error << '\n';
-        set_state(CameraState::reconnecting, error);
-        std::this_thread::sleep_for(std::chrono::duration<double>(settings.reconnect_seconds));
-        continue;
-      }
-      set_state(CameraState::streaming);
+    if (!internal::capture_once(
+            camera, settings, slot,
+            [this](CameraState state, std::optional<std::string> error) {
+              set_state(state, std::move(error));
+            },
+            unix_now_ns())) {
+      std::this_thread::sleep_for(std::chrono::duration<double>(settings.reconnect_seconds));
     }
-    cv::Mat frame;
-    if (!camera.grab() || !camera.retrieve(frame) || frame.empty()) {
-      const std::string error = "camera capture failed";
-      set_state(CameraState::error, error);
-      camera.release();
-      continue;
-    }
-    slot.update(std::move(frame), unix_now_ns());
   }
   camera.release();
 }
@@ -154,6 +185,8 @@ void CameraService::Implementation::run(std::stop_token stop_token) {
         std::vector<std::uint8_t> jpeg;
         if (cv::imencode(".jpg", frame->bgr, jpeg, {cv::IMWRITE_JPEG_QUALITY, settings.jpeg_quality})) {
           gate.accept(std::move(jpeg), frame->captured_at_unix_ns);
+          std::lock_guard lock(state_mutex);
+          internal::recover_jpeg_error(state, last_error);
         } else {
           set_state(CameraState::error, "JPEG encoding failed");
         }

@@ -11,14 +11,18 @@ sudo apt-get install -y \
   python3-eclipse-zenoh=1.10.0 python3-protobuf python3-venv
 
 sha256sum --check models/yolov8n-face-lindevs.onnx.sha256
-protoc --proto_path modules/face_tracking_schemas/proto \
-  --python_out modules/web_hmi_target_manager/service/src/face_tracking_hmi/generated \
-  modules/face_tracking_schemas/proto/face_tracking_v2.proto
 
+export PYTHONNOUSERSITE=1
 python3 -m venv --clear --system-site-packages .venv
 .venv/bin/python -m pip install --upgrade pip
-.venv/bin/python -m pip install -e 'modules/web_hmi_target_manager/service[dev]'
-.venv/bin/python -m pip freeze --local --exclude-editable > modules/web_hmi_target_manager/service/requirements.lock
+.venv/bin/python -m pip install -r modules/web_hmi_target_manager/service/requirements.lock
+.venv/bin/python -m pip install --no-deps -e modules/web_hmi_target_manager/service
+lock_snapshot="$(mktemp)"
+trap 'rm -f "$lock_snapshot"' EXIT
+.venv/bin/python -m pip freeze --local --exclude-editable > "$lock_snapshot"
+diff -u modules/web_hmi_target_manager/service/requirements.lock "$lock_snapshot"
+rm -f "$lock_snapshot"
+trap - EXIT
 
 cmake --fresh -S . -B build -DCMAKE_BUILD_TYPE=Release -DFACE_TRACKING_BUILD_TESTS=ON
 cmake --build build --parallel

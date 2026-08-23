@@ -60,4 +60,17 @@ class OpenCvYoloEngine final : public InferenceEngine {
   std::unique_ptr<Implementation> implementation_;
 };
 
+struct LetterboxTransform {
+  float scale{};
+  int resized_width{};
+  int resized_height{};
+  int pad_x{};
+  int pad_y{};
+};
+
+LetterboxTransform calculate_letterbox(int image_width, int image_height, int input_size);
+std::vector<DetectionBox> postprocess_yolo(
+    const cv::Mat& raw, int image_width, int image_height, const LetterboxTransform& transform,
+    float confidence_threshold, float iou_threshold);
+
 }  // namespace face_tracking::detector::internal

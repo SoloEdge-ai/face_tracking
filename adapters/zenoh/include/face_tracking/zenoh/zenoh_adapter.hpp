@@ -10,7 +10,7 @@ namespace face_tracking::zenoh_adapter {
 
 class CameraOutput final : public camera::OutputPort {
  public:
-  explicit CameraOutput(const Settings& settings);
+  explicit CameraOutput(const TransportSettings& settings);
   ~CameraOutput() override;
   CameraOutput(const CameraOutput&) = delete;
   CameraOutput& operator=(const CameraOutput&) = delete;
@@ -24,7 +24,7 @@ class CameraOutput final : public camera::OutputPort {
 
 class DetectorTransport final : public detector::TransportPort {
  public:
-  explicit DetectorTransport(const Settings& settings);
+  explicit DetectorTransport(const TransportSettings& settings);
   ~DetectorTransport() override;
   DetectorTransport(const DetectorTransport&) = delete;
   DetectorTransport& operator=(const DetectorTransport&) = delete;
