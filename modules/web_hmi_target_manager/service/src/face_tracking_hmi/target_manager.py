@@ -103,7 +103,9 @@ class TargetManager:
             return {
                 "tracking_state": self._state,
                 "selected_track_id": self._selected.track_id if self._selected else None,
-                "tracker_instance_id": self._selected.tracker_instance_id if self._selected else None,
+                "selected_tracker_instance_id": self._selected.tracker_instance_id
+                if self._selected
+                else None,
             }
 
     def _advance_locked(self, now: int) -> SelectedTargetObservation | None:

@@ -62,7 +62,9 @@ def test_user_can_select_and_clear_a_recent_tracked_face() -> None:
     assert response.status_code == 200
     assert response.json()["tracking_state"] == "TRACKING"
     assert transport.published[-1].selected_track_id == 9
-    assert client.get("/api/faces").json()["faces"][0]["track_id"] == 9
+    faces = client.get("/api/faces").json()
+    assert faces["faces"][0]["track_id"] == 9
+    assert faces["tracker_instance_id"] == "tracker"
 
     cleared = client.delete("/api/target")
     assert cleared.status_code == 200
