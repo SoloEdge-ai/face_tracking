@@ -65,7 +65,7 @@ TEST(ServoDriver, HoldsOnlyTheAxisWhoseCandidateWouldExceedItsLimit) {
   FakePwm pwm;
   face_tracking::servo::ServoDriver driver(settings(), pwm);
   driver.start(1'100'000'000);
-  driver.process(command(0, 34, face_tracking::ControllerDecision::applied), 1'100'000'001);
+  driver.process(command(0, 29, face_tracking::ControllerDecision::applied), 1'100'000'001);
   const auto& state = driver.process(
       command(1, 2, face_tracking::ControllerDecision::applied, 2), 1'100'000'002);
   EXPECT_FLOAT_EQ(state.commanded_pan_deg, 136);
@@ -94,7 +94,7 @@ TEST(ServoDriver, MissingHoldsAndLostReturnsHome) {
   const auto& held = driver.process(
       command(0, 0, face_tracking::ControllerDecision::missing_hold, 2), 1'100'000'002);
   EXPECT_FLOAT_EQ(held.commanded_pan_deg, 140);
-  EXPECT_FLOAT_EQ(held.commanded_tilt_deg, 15);
+  EXPECT_FLOAT_EQ(held.commanded_tilt_deg, 20);
   EXPECT_EQ(held.decision, face_tracking::ServoDecision::held_missing);
   const auto& home = driver.process(
       command(0, 0, face_tracking::ControllerDecision::lost, 3), 1'100'000'003);
