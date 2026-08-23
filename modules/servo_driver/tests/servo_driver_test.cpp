@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "face_tracking/servo/servo_driver.hpp"
+#include "face_tracking/servo/servo_sweep.hpp"
 
 namespace {
 class FakePwm final : public face_tracking::servo::ServoPwmPort {
@@ -245,4 +246,37 @@ TEST(ServoDriverService, LivelinessLossLatchesHomeAndDropsQueuedCommands) {
   EXPECT_TRUE(transport.wait_for_state(
       face_tracking::ServoDecision::home_upstream_timeout, 135, 20));
   worker.request_stop();
+}
+
+TEST(ServoSweep, StartsAtHomeAndReversesAtTiltMaximum) {
+  face_tracking::servo::ServoSweep sweep(settings(), 1.0F);
+  EXPECT_FLOAT_EQ(sweep.position().pan_deg, 135);
+  EXPECT_FLOAT_EQ(sweep.position().tilt_deg, 20);
+  for (int step = 0; step < 25; ++step) sweep.next();
+  EXPECT_FLOAT_EQ(sweep.position().tilt_deg, 45);
+  sweep.next();
+  EXPECT_FLOAT_EQ(sweep.position().tilt_deg, 44);
+}
+
+TEST(ServoSweep, AlwaysStaysInsideBothConfiguredLimits) {
+  face_tracking::servo::ServoSweep sweep(settings(), 1.0F);
+  bool saw_pan_min = false;
+  bool saw_pan_max = false;
+  bool saw_tilt_min = false;
+  bool saw_tilt_max = false;
+  for (int tick = 0; tick < 1000; ++tick) {
+    const auto& position = sweep.next();
+    EXPECT_GE(position.pan_deg, 0);
+    EXPECT_LE(position.pan_deg, 270);
+    EXPECT_GE(position.tilt_deg, 15);
+    EXPECT_LE(position.tilt_deg, 45);
+    saw_pan_min |= position.pan_deg == 0;
+    saw_pan_max |= position.pan_deg == 270;
+    saw_tilt_min |= position.tilt_deg == 15;
+    saw_tilt_max |= position.tilt_deg == 45;
+  }
+  EXPECT_TRUE(saw_pan_min);
+  EXPECT_TRUE(saw_pan_max);
+  EXPECT_TRUE(saw_tilt_min);
+  EXPECT_TRUE(saw_tilt_max);
 }
