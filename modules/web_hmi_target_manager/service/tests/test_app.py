@@ -1,10 +1,9 @@
-import pytest
-from fastapi.testclient import TestClient
-
 from face_tracking_hmi.app import create_app, mjpeg_chunks
 from face_tracking_hmi.domain import DetectionBox, DetectionResult, FrameMetadata
 from face_tracking_hmi.store import LatestFrameStore
 from face_tracking_hmi.target_manager import TargetManager
+from fastapi.testclient import TestClient
+import pytest
 
 
 class FakeTransport:
