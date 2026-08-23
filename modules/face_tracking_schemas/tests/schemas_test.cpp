@@ -133,6 +133,44 @@ TEST(Schemas, TargetObservationAndControllerOutputRoundTrip) {
       face_tracking::ControllerDecision::out_of_order);
 }
 
+TEST(Schemas, MissingTargetAndServoCommandedStateRoundTrip) {
+  face_tracking::SelectedTargetObservation missing{
+      .source_instance_id = "camera-a",
+      .tracker_instance_id = "tracker-a",
+      .sequence = 10,
+      .captured_at_unix_ns = 2'200'000'000,
+      .selected_track_id = 42,
+      .image_width = 1280,
+      .image_height = 720,
+      .tracking_state = face_tracking::TrackingState::missing,
+  };
+  EXPECT_EQ(
+      face_tracking::codec::decode_selected_target(face_tracking::codec::encode(missing))
+          .tracking_state,
+      face_tracking::TrackingState::missing);
+
+  face_tracking::PanTiltCommandedState state{
+      .updated_at_unix_ns = 2'300'000'000,
+      .commanded_pan_deg = 135.0F,
+      .commanded_tilt_deg = 10.0F,
+      .last_track_id = 42,
+      .state = face_tracking::ServoDriverState::holding,
+      .decision = face_tracking::ServoDecision::held_missing,
+      .pan_limit_held = false,
+      .tilt_limit_held = true,
+      .pwm_active = true,
+      .applied_commands = 7,
+      .rejected_commands = 1,
+  };
+  const auto decoded = face_tracking::codec::decode_pan_tilt_commanded_state(
+      face_tracking::codec::encode(state));
+  EXPECT_FLOAT_EQ(decoded.commanded_pan_deg, 135.0F);
+  EXPECT_FLOAT_EQ(decoded.commanded_tilt_deg, 10.0F);
+  EXPECT_EQ(decoded.decision, face_tracking::ServoDecision::held_missing);
+  EXPECT_TRUE(decoded.tilt_limit_held);
+  EXPECT_TRUE(decoded.pwm_active);
+}
+
 TEST(Schemas, PythonGoldenCameraStatusRoundTripsByteForByte) {
   const auto bytes = fixture("camera_status_v2.hex");
   const auto decoded = face_tracking::codec::decode_camera_status(bytes);
@@ -202,4 +240,23 @@ TEST(Settings, ControllerLoadsTypedSettingsAndKeys) {
   EXPECT_EQ(settings.controller.control_rate_hz, 20);
   EXPECT_EQ(settings.transport.selected_target_key(), "face_tracking/pi/target/selected");
   EXPECT_EQ(settings.transport.pan_tilt_delta_key(), "face_tracking/pi/pan_tilt/delta_cmd");
+}
+
+TEST(Settings, ServoLoadsIndependentAxisLimitsAndKeys) {
+  const auto path = std::filesystem::temp_directory_path() / "face_tracking_servo_settings_test.yaml";
+  {
+    std::ofstream output(path);
+    output << "common: {device_id: pi}\n"
+              "middleware: {adapter: zenoh, connect: tcp/127.0.0.1:7447, key_prefix: face_tracking}\n"
+              "servo: {gpio_chip: 0, frequency_hz: 50, upstream_timeout_ms: 1500, tracking_enabled: true, "
+              "pan: {gpio: 17, rated_max_deg: 270, min_deg: 0, max_deg: 270, home_deg: 135, min_pulse_us: 500, max_pulse_us: 2500, invert: false}, "
+              "tilt: {gpio: 27, rated_max_deg: 180, min_deg: 5, max_deg: 45, home_deg: 10, min_pulse_us: 500, max_pulse_us: 2500, invert: false}}\n";
+  }
+  const auto settings = face_tracking::load_servo_process_settings(path);
+  std::filesystem::remove(path);
+  EXPECT_EQ(settings.servo.pan.gpio, 17);
+  EXPECT_FLOAT_EQ(settings.servo.tilt.home_deg, 10.0F);
+  EXPECT_EQ(settings.transport.pan_tilt_commanded_state_key(),
+            "face_tracking/pi/pan_tilt/commanded_state");
+  EXPECT_EQ(settings.transport.servo_liveliness_key(), "face_tracking/pi/liveliness/servo_driver");
 }

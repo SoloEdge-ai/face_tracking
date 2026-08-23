@@ -91,6 +91,19 @@ TEST(PixelCenterController, LostTargetProducesOneZeroHoldCommand) {
   EXPECT_FLOAT_EQ(command->delta_tilt_deg, 0.0F);
 }
 
+TEST(PixelCenterController, MissingTargetProducesZeroHoldWithoutReusingOldError) {
+  face_tracking::controller::PixelCenterController controller(settings());
+  ASSERT_TRUE(controller.process(observation(740, 300), 1'100'000'000));
+  auto missing = observation(740, 300, 2);
+  missing.tracking_state = face_tracking::TrackingState::missing;
+  const auto command = controller.process(missing, 1'100'000'001);
+  ASSERT_TRUE(command);
+  EXPECT_FLOAT_EQ(command->delta_pan_deg, 0.0F);
+  EXPECT_FLOAT_EQ(command->delta_tilt_deg, 0.0F);
+  EXPECT_EQ(command->reason, face_tracking::ControllerDecision::missing_hold);
+  EXPECT_FALSE(controller.check_timeout(1'200'000'000));
+}
+
 TEST(PixelCenterController, AllowsSwitchingTargetsWithinTheSameDetectionFrame) {
   face_tracking::controller::PixelCenterController controller(settings());
   const auto first = controller.process(observation(740, 360, 5, 7), 1'100'000'000);

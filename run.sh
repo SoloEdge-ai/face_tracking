@@ -8,9 +8,10 @@ build_dir="${FACE_TRACKING_BUILD_DIR:-build}"
 camera="$build_dir/bin/face_tracking_camera_zenoh"
 detector="$build_dir/bin/face_tracking_detector_zenoh"
 controller="$build_dir/bin/face_tracking_controller_zenoh"
+servo="$build_dir/bin/face_tracking_servo_zenoh"
 bringup="$build_dir/bin/face_tracking_bringup"
 
-for executable in "$camera" "$detector" "$controller" "$bringup"; do
+for executable in "$camera" "$detector" "$controller" "$servo" "$bringup"; do
   if [[ ! -x "$executable" ]]; then
     echo "Missing $executable. Run ./setup.sh first." >&2
     exit 1
@@ -27,4 +28,4 @@ fi
 
 export FACE_TRACKING_CONFIG="${FACE_TRACKING_CONFIG:-config/default.yaml}"
 export PYTHONNOUSERSITE=1
-exec "$bringup" "$camera" "$detector" "$controller" .venv/bin/python
+exec "$bringup" "$camera" "$detector" "$controller" "$servo" .venv/bin/python

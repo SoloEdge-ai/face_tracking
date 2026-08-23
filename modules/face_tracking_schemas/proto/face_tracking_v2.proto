@@ -79,6 +79,7 @@ enum TrackingState {
   TRACKING_STATE_NO_TARGET = 1;
   TRACKING_STATE_TRACKING = 2;
   TRACKING_STATE_LOST = 3;
+  TRACKING_STATE_MISSING = 4;
 }
 
 message SelectedTargetObservation {
@@ -104,6 +105,7 @@ enum ControllerDecision {
   CONTROLLER_DECISION_STALE = 5;
   CONTROLLER_DECISION_DUPLICATE = 6;
   CONTROLLER_DECISION_OUT_OF_ORDER = 7;
+  CONTROLLER_DECISION_MISSING_HOLD = 8;
 }
 
 message PanTiltDelta {
@@ -141,4 +143,47 @@ message PixelCenterControllerStatus {
   uint64 duplicate_observations = 10;
   uint64 out_of_order_observations = 11;
   optional string last_rejection_reason = 12;
+}
+
+enum ServoDriverState {
+  SERVO_DRIVER_STATE_UNSPECIFIED = 0;
+  SERVO_DRIVER_STATE_STARTING = 1;
+  SERVO_DRIVER_STATE_HOMING = 2;
+  SERVO_DRIVER_STATE_HOLDING = 3;
+  SERVO_DRIVER_STATE_TRACKING = 4;
+  SERVO_DRIVER_STATE_ERROR = 5;
+  SERVO_DRIVER_STATE_STOPPED = 6;
+}
+
+enum ServoDecision {
+  SERVO_DECISION_UNSPECIFIED = 0;
+  SERVO_DECISION_HOME_STARTUP = 1;
+  SERVO_DECISION_APPLIED = 2;
+  SERVO_DECISION_HELD_DEADBAND = 3;
+  SERVO_DECISION_HELD_MISSING = 4;
+  SERVO_DECISION_HELD_LIMIT = 5;
+  SERVO_DECISION_HOME_LOST = 6;
+  SERVO_DECISION_HOME_NO_TARGET = 7;
+  SERVO_DECISION_HOME_STALE = 8;
+  SERVO_DECISION_HOME_UPSTREAM_TIMEOUT = 9;
+  SERVO_DECISION_REJECTED_DUPLICATE = 10;
+  SERVO_DECISION_REJECTED_OUT_OF_ORDER = 11;
+  SERVO_DECISION_REJECTED_INVALID = 12;
+  SERVO_DECISION_ERROR = 13;
+}
+
+message PanTiltCommandedState {
+  uint32 schema_version = 1;
+  int64 updated_at_unix_ns = 2;
+  float commanded_pan_deg = 3;
+  float commanded_tilt_deg = 4;
+  uint64 last_track_id = 5;
+  ServoDriverState state = 6;
+  ServoDecision decision = 7;
+  bool pan_limit_held = 8;
+  bool tilt_limit_held = 9;
+  bool pwm_active = 10;
+  optional string last_error = 11;
+  uint64 applied_commands = 12;
+  uint64 rejected_commands = 13;
 }

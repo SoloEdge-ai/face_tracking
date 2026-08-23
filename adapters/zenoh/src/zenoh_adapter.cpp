@@ -184,4 +184,119 @@ void ControllerTransport::publish_status(const PixelCenterControllerStatus& stat
   implementation_->status.put(bytes(codec::encode(status)));
 }
 
+struct ServoTransport::Implementation {
+  explicit Implementation(const TransportSettings& settings)
+      : settings(settings),
+        session(open_session(settings.middleware)),
+        commanded_state(session.declare_publisher(
+            zenoh::KeyExpr(settings.pan_tilt_commanded_state_key()), [] {
+              zenoh::Session::PublisherOptions options;
+              options.encoding = zenoh::Encoding::Predefined::application_protobuf();
+              return options;
+            }())),
+        liveliness(session.liveliness_declare_token(
+            zenoh::KeyExpr(settings.servo_liveliness_key()))) {}
+
+  void activity(bool alive) {
+    std::lock_guard lock(handler_mutex);
+    if (activity_handler) activity_handler(alive);
+  }
+
+  TransportSettings settings;
+  zenoh::Session session;
+  zenoh::Publisher commanded_state;
+  zenoh::LivelinessToken liveliness;
+  std::optional<zenoh::Subscriber<void>> delta_subscriber;
+  std::optional<zenoh::Subscriber<void>> status_subscriber;
+  std::optional<zenoh::Subscriber<void>> controller_liveliness_subscriber;
+  std::optional<zenoh::Queryable<void>> state_queryable;
+  std::mutex handler_mutex;
+  servo::TransportPort::CommandHandler command_handler;
+  servo::TransportPort::ActivityHandler activity_handler;
+  std::mutex state_mutex;
+  std::optional<PanTiltCommandedState> latest_state;
+};
+
+ServoTransport::ServoTransport(const TransportSettings& settings)
+    : implementation_(std::make_unique<Implementation>(settings)) {}
+ServoTransport::~ServoTransport() = default;
+
+void ServoTransport::start(CommandHandler command_handler, ActivityHandler activity_handler) {
+  {
+    std::lock_guard lock(implementation_->handler_mutex);
+    implementation_->command_handler = std::move(command_handler);
+    implementation_->activity_handler = std::move(activity_handler);
+  }
+  implementation_->delta_subscriber.emplace(implementation_->session.declare_subscriber(
+      zenoh::KeyExpr(implementation_->settings.pan_tilt_delta_key()),
+      [this](const zenoh::Sample& sample) {
+        try {
+          auto command = codec::decode_pan_tilt_delta(sample.get_payload().as_vector());
+          std::lock_guard lock(implementation_->handler_mutex);
+          if (implementation_->command_handler) {
+            implementation_->command_handler(std::move(command));
+          }
+          if (implementation_->activity_handler) implementation_->activity_handler(true);
+        } catch (const std::exception&) {
+          // Invalid commands do not refresh upstream activity.
+        }
+      },
+      zenoh::closures::none));
+  implementation_->status_subscriber.emplace(implementation_->session.declare_subscriber(
+      zenoh::KeyExpr(implementation_->settings.controller_status_key()),
+      [this](const zenoh::Sample& sample) {
+        try {
+          (void)codec::decode_pixel_center_controller_status(sample.get_payload().as_vector());
+          implementation_->activity(true);
+        } catch (const std::exception&) {
+          // Invalid status does not refresh upstream activity.
+        }
+      },
+      zenoh::closures::none));
+  zenoh::Session::LivelinessSubscriberOptions liveliness_options;
+  liveliness_options.history = true;
+  implementation_->controller_liveliness_subscriber.emplace(
+      implementation_->session.liveliness_declare_subscriber(
+          zenoh::KeyExpr(implementation_->settings.controller_liveliness_key()),
+          [this](const zenoh::Sample& sample) {
+            implementation_->activity(sample.get_kind() == Z_SAMPLE_KIND_PUT);
+          },
+          zenoh::closures::none, std::move(liveliness_options)));
+  zenoh::Session::QueryableOptions queryable_options;
+  queryable_options.complete = true;
+  implementation_->state_queryable.emplace(implementation_->session.declare_queryable(
+      zenoh::KeyExpr(implementation_->settings.pan_tilt_commanded_state_key()),
+      [this](const zenoh::Query& query) {
+        std::optional<PanTiltCommandedState> state;
+        {
+          std::lock_guard lock(implementation_->state_mutex);
+          state = implementation_->latest_state;
+        }
+        if (state) {
+          query.reply(
+              implementation_->settings.pan_tilt_commanded_state_key(),
+              bytes(codec::encode(*state)));
+        }
+      },
+      zenoh::closures::none, std::move(queryable_options)));
+}
+
+void ServoTransport::stop() {
+  implementation_->state_queryable.reset();
+  implementation_->controller_liveliness_subscriber.reset();
+  implementation_->status_subscriber.reset();
+  implementation_->delta_subscriber.reset();
+  std::lock_guard lock(implementation_->handler_mutex);
+  implementation_->command_handler = {};
+  implementation_->activity_handler = {};
+}
+
+void ServoTransport::publish_state(const PanTiltCommandedState& state) {
+  {
+    std::lock_guard lock(implementation_->state_mutex);
+    implementation_->latest_state = state;
+  }
+  implementation_->commanded_state.put(bytes(codec::encode(state)));
+}
+
 }  // namespace face_tracking::zenoh_adapter

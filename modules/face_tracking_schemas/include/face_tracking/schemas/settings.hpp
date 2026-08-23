@@ -56,6 +56,26 @@ struct PixelCenterControllerSettings {
   int observation_timeout_ms{};
 };
 
+struct ServoAxisSettings {
+  int gpio{};
+  float rated_max_deg{};
+  float min_deg{};
+  float max_deg{};
+  float home_deg{};
+  int min_pulse_us{};
+  int max_pulse_us{};
+  bool invert{};
+};
+
+struct ServoDriverSettings {
+  int gpio_chip{};
+  int frequency_hz{};
+  int upstream_timeout_ms{};
+  bool tracking_enabled{};
+  ServoAxisSettings pan;
+  ServoAxisSettings tilt;
+};
+
 struct TransportSettings {
   std::string device_id;
   MiddlewareSettings middleware;
@@ -71,6 +91,8 @@ struct TransportSettings {
   [[nodiscard]] std::string pan_tilt_delta_key() const;
   [[nodiscard]] std::string controller_status_key() const;
   [[nodiscard]] std::string controller_liveliness_key() const;
+  [[nodiscard]] std::string pan_tilt_commanded_state_key() const;
+  [[nodiscard]] std::string servo_liveliness_key() const;
 };
 
 struct CameraProcessSettings {
@@ -88,8 +110,14 @@ struct ControllerProcessSettings {
   PixelCenterControllerSettings controller;
 };
 
+struct ServoProcessSettings {
+  TransportSettings transport;
+  ServoDriverSettings servo;
+};
+
 CameraProcessSettings load_camera_process_settings(const std::filesystem::path& path);
 DetectorProcessSettings load_detector_process_settings(const std::filesystem::path& path);
 ControllerProcessSettings load_controller_process_settings(const std::filesystem::path& path);
+ServoProcessSettings load_servo_process_settings(const std::filesystem::path& path);
 
 }  // namespace face_tracking

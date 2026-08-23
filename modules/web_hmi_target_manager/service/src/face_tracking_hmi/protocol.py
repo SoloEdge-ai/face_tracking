@@ -106,6 +106,7 @@ def encode_selected_target(value: SelectedTargetObservation) -> bytes:
     states = {
         TrackingState.NO_TARGET: wire.TRACKING_STATE_NO_TARGET,
         TrackingState.TRACKING: wire.TRACKING_STATE_TRACKING,
+        TrackingState.MISSING: wire.TRACKING_STATE_MISSING,
         TrackingState.LOST: wire.TRACKING_STATE_LOST,
     }
     return wire.SelectedTargetObservation(
@@ -136,6 +137,7 @@ def decode_pan_tilt_delta(payload: bytes) -> dict[str, object]:
             wire.CONTROLLER_DECISION_STALE: "STALE",
             wire.CONTROLLER_DECISION_DUPLICATE: "DUPLICATE",
             wire.CONTROLLER_DECISION_OUT_OF_ORDER: "OUT_OF_ORDER",
+            wire.CONTROLLER_DECISION_MISSING_HOLD: "MISSING_HOLD",
         }
         return {
             "schema_version": message.schema_version,
@@ -187,3 +189,52 @@ def decode_controller_status(payload: bytes) -> dict[str, object]:
         raise
     except Exception as exc:
         raise ProtocolError("invalid controller status protobuf") from exc
+
+
+def decode_servo_commanded_state(payload: bytes) -> dict[str, object]:
+    try:
+        message = wire.PanTiltCommandedState.FromString(payload)
+        if message.schema_version != 2 or message.updated_at_unix_ns <= 0:
+            raise ProtocolError("unsupported or invalid servo state")
+        states = {
+            wire.SERVO_DRIVER_STATE_STARTING: "STARTING",
+            wire.SERVO_DRIVER_STATE_HOMING: "HOMING",
+            wire.SERVO_DRIVER_STATE_HOLDING: "HOLDING",
+            wire.SERVO_DRIVER_STATE_TRACKING: "TRACKING",
+            wire.SERVO_DRIVER_STATE_ERROR: "ERROR",
+            wire.SERVO_DRIVER_STATE_STOPPED: "STOPPED",
+        }
+        decisions = {
+            wire.SERVO_DECISION_HOME_STARTUP: "HOME_STARTUP",
+            wire.SERVO_DECISION_APPLIED: "APPLIED",
+            wire.SERVO_DECISION_HELD_DEADBAND: "HELD_DEADBAND",
+            wire.SERVO_DECISION_HELD_MISSING: "HELD_MISSING",
+            wire.SERVO_DECISION_HELD_LIMIT: "HELD_LIMIT",
+            wire.SERVO_DECISION_HOME_LOST: "HOME_LOST",
+            wire.SERVO_DECISION_HOME_NO_TARGET: "HOME_NO_TARGET",
+            wire.SERVO_DECISION_HOME_STALE: "HOME_STALE",
+            wire.SERVO_DECISION_HOME_UPSTREAM_TIMEOUT: "HOME_UPSTREAM_TIMEOUT",
+            wire.SERVO_DECISION_REJECTED_DUPLICATE: "REJECTED_DUPLICATE",
+            wire.SERVO_DECISION_REJECTED_OUT_OF_ORDER: "REJECTED_OUT_OF_ORDER",
+            wire.SERVO_DECISION_REJECTED_INVALID: "REJECTED_INVALID",
+            wire.SERVO_DECISION_ERROR: "ERROR",
+        }
+        return {
+            "schema_version": message.schema_version,
+            "updated_at_unix_ns": message.updated_at_unix_ns,
+            "commanded_pan_deg": message.commanded_pan_deg,
+            "commanded_tilt_deg": message.commanded_tilt_deg,
+            "last_track_id": message.last_track_id,
+            "state": states.get(message.state, "STARTING"),
+            "decision": decisions.get(message.decision, "UNSPECIFIED"),
+            "pan_limit_held": message.pan_limit_held,
+            "tilt_limit_held": message.tilt_limit_held,
+            "pwm_active": message.pwm_active,
+            "last_error": message.last_error if message.HasField("last_error") else None,
+            "applied_commands": message.applied_commands,
+            "rejected_commands": message.rejected_commands,
+        }
+    except ProtocolError:
+        raise
+    except Exception as exc:
+        raise ProtocolError("invalid servo state protobuf") from exc

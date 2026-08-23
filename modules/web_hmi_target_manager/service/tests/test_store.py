@@ -34,3 +34,16 @@ def test_detection_expires_after_one_second() -> None:
     store.update_detection(result, received_at_unix_ns=1_000_000_000)
     assert store.detection(now_unix_ns=1_500_000_000) == result
     assert store.detection(now_unix_ns=2_100_000_000) is None
+
+
+def test_servo_snapshot_reports_commanded_angles_and_freshness() -> None:
+    store = LatestFrameStore(stale_after_ms=500, offline_after_ms=3000)
+    store.update_servo_state(
+        {"state": "HOLDING", "commanded_pan_deg": 135.0, "commanded_tilt_deg": 10.0},
+        received_at_unix_ns=1_000_000_000,
+    )
+    assert store.servo_snapshot(now_unix_ns=1_400_000_000)["freshness"] == "FRESH"
+    assert store.servo_snapshot(now_unix_ns=1_600_000_000)["freshness"] == "STALE"
+    offline = store.servo_snapshot(now_unix_ns=4_100_000_000)
+    assert offline["freshness"] == "OFFLINE"
+    assert offline["commanded_pan_deg"] == 135.0

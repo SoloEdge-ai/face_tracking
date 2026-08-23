@@ -72,8 +72,17 @@ struct DetectorStatus {
   std::optional<std::string> last_error;
 };
 
-enum class TrackingState { no_target, tracking, lost };
-enum class ControllerDecision { applied, deadband, no_target, lost, stale, duplicate, out_of_order };
+enum class TrackingState { no_target, tracking, lost, missing };
+enum class ControllerDecision {
+  applied,
+  deadband,
+  no_target,
+  lost,
+  stale,
+  duplicate,
+  out_of_order,
+  missing_hold,
+};
 enum class PixelCenterControllerState { starting, active, holding, error, stopped };
 
 struct SelectedTargetObservation {
@@ -118,9 +127,43 @@ struct PixelCenterControllerStatus {
   std::optional<std::string> last_rejection_reason;
 };
 
+enum class ServoDriverState { starting, homing, holding, tracking, error, stopped };
+enum class ServoDecision {
+  home_startup,
+  applied,
+  held_deadband,
+  held_missing,
+  held_limit,
+  home_lost,
+  home_no_target,
+  home_stale,
+  home_upstream_timeout,
+  rejected_duplicate,
+  rejected_out_of_order,
+  rejected_invalid,
+  error,
+};
+
+struct PanTiltCommandedState {
+  std::uint32_t schema_version{kSchemaVersion};
+  std::int64_t updated_at_unix_ns{};
+  float commanded_pan_deg{};
+  float commanded_tilt_deg{};
+  std::uint64_t last_track_id{};
+  ServoDriverState state{ServoDriverState::starting};
+  ServoDecision decision{ServoDecision::home_startup};
+  bool pan_limit_held{};
+  bool tilt_limit_held{};
+  bool pwm_active{};
+  std::optional<std::string> last_error;
+  std::uint64_t applied_commands{};
+  std::uint64_t rejected_commands{};
+};
+
 void validate(const FrameMetadata& metadata);
 void validate(const DetectionResult& result);
 void validate(const SelectedTargetObservation& observation);
 void validate(const PanTiltDelta& command);
+void validate(const PanTiltCommandedState& state);
 
 }  // namespace face_tracking

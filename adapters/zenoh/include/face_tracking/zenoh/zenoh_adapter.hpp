@@ -6,6 +6,7 @@
 #include "face_tracking/detector/detector_service.hpp"
 #include "face_tracking/controller/pixel_center_controller.hpp"
 #include "face_tracking/schemas/settings.hpp"
+#include "face_tracking/servo/servo_driver.hpp"
 
 namespace face_tracking::zenoh_adapter {
 
@@ -49,6 +50,21 @@ class ControllerTransport final : public controller::TransportPort {
   void stop() override;
   void publish_delta(const PanTiltDelta& command) override;
   void publish_status(const PixelCenterControllerStatus& status) override;
+
+ private:
+  struct Implementation;
+  std::unique_ptr<Implementation> implementation_;
+};
+
+class ServoTransport final : public servo::TransportPort {
+ public:
+  explicit ServoTransport(const TransportSettings& settings);
+  ~ServoTransport() override;
+  ServoTransport(const ServoTransport&) = delete;
+  ServoTransport& operator=(const ServoTransport&) = delete;
+  void start(CommandHandler command_handler, ActivityHandler activity_handler) override;
+  void stop() override;
+  void publish_state(const PanTiltCommandedState& state) override;
 
  private:
   struct Implementation;

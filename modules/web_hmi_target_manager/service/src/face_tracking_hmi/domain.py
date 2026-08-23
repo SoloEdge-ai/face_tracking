@@ -14,6 +14,7 @@ class HmiCameraState(StrEnum):
 class TrackingState(StrEnum):
     NO_TARGET = "NO_TARGET"
     TRACKING = "TRACKING"
+    MISSING = "MISSING"
     LOST = "LOST"
 
 

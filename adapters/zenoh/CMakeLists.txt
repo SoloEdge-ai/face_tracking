@@ -1,7 +1,7 @@
 add_library(face_tracking_zenoh_adapter src/zenoh_adapter.cpp)
 add_library(face_tracking::zenoh ALIAS face_tracking_zenoh_adapter)
 target_include_directories(face_tracking_zenoh_adapter PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
-target_link_libraries(face_tracking_zenoh_adapter PUBLIC face_tracking::schemas face_tracking::camera face_tracking::detector face_tracking::controller zenohcxx::zenohc)
+target_link_libraries(face_tracking_zenoh_adapter PUBLIC face_tracking::schemas face_tracking::camera face_tracking::detector face_tracking::controller face_tracking::servo zenohcxx::zenohc)
 target_compile_options(face_tracking_zenoh_adapter PRIVATE -Wall -Wextra -Wpedantic)
 
 add_executable(face_tracking_camera_zenoh apps/camera_main.cpp)
@@ -13,4 +13,7 @@ target_link_libraries(face_tracking_detector_zenoh PRIVATE face_tracking::detect
 add_executable(face_tracking_controller_zenoh apps/controller_main.cpp)
 target_link_libraries(face_tracking_controller_zenoh PRIVATE face_tracking::controller face_tracking::zenoh)
 
-install(TARGETS face_tracking_camera_zenoh face_tracking_detector_zenoh face_tracking_controller_zenoh RUNTIME DESTINATION bin)
+add_executable(face_tracking_servo_zenoh apps/servo_main.cpp)
+target_link_libraries(face_tracking_servo_zenoh PRIVATE face_tracking::servo face_tracking::servo_lgpio face_tracking::zenoh)
+
+install(TARGETS face_tracking_camera_zenoh face_tracking_detector_zenoh face_tracking_controller_zenoh face_tracking_servo_zenoh RUNTIME DESTINATION bin)

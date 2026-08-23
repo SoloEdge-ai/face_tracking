@@ -8,6 +8,7 @@ from face_tracking_hmi.protocol import (
     decode_detector_status,
     decode_frame_metadata,
     decode_pan_tilt_delta,
+    decode_servo_commanded_state,
 )
 
 
@@ -141,3 +142,21 @@ def test_controller_output_and_status_protobuf_decode() -> None:
     decoded = decode_controller_status(status.SerializeToString())
     assert decoded["state"] == "ACTIVE"
     assert decoded["error_x_px"] == 100
+
+
+def test_servo_commanded_state_protobuf_decodes() -> None:
+    payload = wire.PanTiltCommandedState(
+        schema_version=2,
+        updated_at_unix_ns=1_000_000_000,
+        commanded_pan_deg=135,
+        commanded_tilt_deg=10,
+        last_track_id=7,
+        state=wire.SERVO_DRIVER_STATE_HOLDING,
+        decision=wire.SERVO_DECISION_HOME_LOST,
+        pwm_active=True,
+    ).SerializeToString()
+    decoded = decode_servo_commanded_state(payload)
+    assert decoded["commanded_pan_deg"] == 135
+    assert decoded["commanded_tilt_deg"] == 10
+    assert decoded["state"] == "HOLDING"
+    assert decoded["decision"] == "HOME_LOST"

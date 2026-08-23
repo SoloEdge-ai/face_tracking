@@ -36,12 +36,36 @@ controller:
   max_tilt_step_deg: 1.0
   observation_timeout_ms: 600
 
+servo:
+  gpio_chip: 0
+  frequency_hz: 50
+  upstream_timeout_ms: 1500
+  tracking_enabled: true
+  pan:
+    gpio: 17
+    rated_max_deg: 270
+    min_deg: 0
+    max_deg: 270
+    home_deg: 135
+    min_pulse_us: 500
+    max_pulse_us: 2500
+    invert: false
+  tilt:
+    gpio: 27
+    rated_max_deg: 180
+    min_deg: 5
+    max_deg: 45
+    home_deg: 10
+    min_pulse_us: 500
+    max_pulse_us: 2500
+    invert: false
+
 hmi:
   host: 0.0.0.0
   port: 8080
   stale_after_ms: 500
   offline_after_ms: 3000
   target:
-    lost_after_ms: 400
+    missing_frame_threshold: 5
     reacquire_timeout_ms: 1000
     selection_max_age_ms: 1000

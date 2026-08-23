@@ -13,7 +13,7 @@ def main() -> None:
     settings = load_settings()
     store = LatestFrameStore(stale_after_ms=settings.stale_after_ms, offline_after_ms=settings.offline_after_ms)
     target_manager = TargetManager(
-        lost_after_ms=settings.target_lost_after_ms,
+        missing_frame_threshold=settings.target_missing_frame_threshold,
         reacquire_timeout_ms=settings.target_reacquire_timeout_ms,
         selection_max_age_ms=settings.selection_max_age_ms,
     )

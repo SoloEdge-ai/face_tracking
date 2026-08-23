@@ -13,6 +13,7 @@ from .protocol import (
     decode_detector_status,
     decode_frame_metadata,
     decode_pan_tilt_delta,
+    decode_servo_commanded_state,
     encode_selected_target,
 )
 from .store import LatestFrameStore
@@ -102,6 +103,14 @@ class ZenohTransport:
                 except (ProtocolError, TypeError, ValueError):
                     self._store.reject_invalid_frame()
 
+            def on_servo_state(sample: object) -> None:
+                try:
+                    self._store.update_servo_state(
+                        decode_servo_commanded_state(bytes(getattr(sample, "payload")))
+                    )
+                except (ProtocolError, TypeError, ValueError):
+                    self._store.reject_invalid_frame()
+
             declarations = [
                 session.declare_subscriber(self._settings.key("camera/image"), on_frame),
                 session.declare_subscriber(self._settings.key("camera/status"), on_status),
@@ -116,7 +125,18 @@ class ZenohTransport:
                     self._settings.key("diagnostics/pixel_center_controller"),
                     on_controller_status,
                 ),
+                session.declare_subscriber(
+                    self._settings.key("pan_tilt/commanded_state"), on_servo_state
+                ),
             ]
+            try:
+                session.get(
+                    self._settings.key("pan_tilt/commanded_state"),
+                    lambda reply: on_servo_state(getattr(reply, "ok")),
+                    timeout=1.0,
+                )
+            except (AttributeError, TypeError, ValueError):
+                pass
             while not self._stop.wait(0.05):
                 if self._target_manager:
                     observation = self._target_manager.tick()

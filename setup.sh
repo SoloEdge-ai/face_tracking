@@ -7,7 +7,7 @@ cd "$root_dir"
 sudo apt-get update
 sudo apt-get install -y \
   ca-certificates cmake curl g++ git libavcodec-dev libavformat-dev libavutil-dev libgtest-dev libopencv-dev libprotobuf-dev \
-  libswscale-dev libyaml-cpp-dev libzenohc-dev=1.10.0 nodejs npm protobuf-compiler \
+  liblgpio-dev libswscale-dev libyaml-cpp-dev libzenohc-dev=1.10.0 nodejs npm protobuf-compiler \
   python3-eclipse-zenoh=1.10.0 python3-protobuf python3-venv
 
 sha256sum --check models/yolov8n-face-lindevs.onnx.sha256

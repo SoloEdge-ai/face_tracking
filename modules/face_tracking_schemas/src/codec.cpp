@@ -69,6 +69,7 @@ wire::TrackingState to_wire(TrackingState value) {
     case TrackingState::no_target: return wire::TRACKING_STATE_NO_TARGET;
     case TrackingState::tracking: return wire::TRACKING_STATE_TRACKING;
     case TrackingState::lost: return wire::TRACKING_STATE_LOST;
+    case TrackingState::missing: return wire::TRACKING_STATE_MISSING;
   }
   throw std::invalid_argument("invalid tracking state");
 }
@@ -78,6 +79,7 @@ TrackingState from_wire(wire::TrackingState value) {
     case wire::TRACKING_STATE_NO_TARGET: return TrackingState::no_target;
     case wire::TRACKING_STATE_TRACKING: return TrackingState::tracking;
     case wire::TRACKING_STATE_LOST: return TrackingState::lost;
+    case wire::TRACKING_STATE_MISSING: return TrackingState::missing;
     default: throw std::invalid_argument("invalid tracking state");
   }
 }
@@ -91,6 +93,7 @@ wire::ControllerDecision to_wire(ControllerDecision value) {
     case ControllerDecision::stale: return wire::CONTROLLER_DECISION_STALE;
     case ControllerDecision::duplicate: return wire::CONTROLLER_DECISION_DUPLICATE;
     case ControllerDecision::out_of_order: return wire::CONTROLLER_DECISION_OUT_OF_ORDER;
+    case ControllerDecision::missing_hold: return wire::CONTROLLER_DECISION_MISSING_HOLD;
   }
   throw std::invalid_argument("invalid controller decision");
 }
@@ -104,6 +107,7 @@ ControllerDecision from_wire(wire::ControllerDecision value) {
     case wire::CONTROLLER_DECISION_STALE: return ControllerDecision::stale;
     case wire::CONTROLLER_DECISION_DUPLICATE: return ControllerDecision::duplicate;
     case wire::CONTROLLER_DECISION_OUT_OF_ORDER: return ControllerDecision::out_of_order;
+    case wire::CONTROLLER_DECISION_MISSING_HOLD: return ControllerDecision::missing_hold;
     default: throw std::invalid_argument("invalid controller decision");
   }
 }
@@ -127,6 +131,68 @@ PixelCenterControllerState from_wire(wire::PixelCenterControllerState value) {
     case wire::PIXEL_CENTER_CONTROLLER_STATE_ERROR: return PixelCenterControllerState::error;
     case wire::PIXEL_CENTER_CONTROLLER_STATE_STOPPED: return PixelCenterControllerState::stopped;
     default: throw std::invalid_argument("invalid controller state");
+  }
+}
+
+wire::ServoDriverState to_wire(ServoDriverState value) {
+  switch (value) {
+    case ServoDriverState::starting: return wire::SERVO_DRIVER_STATE_STARTING;
+    case ServoDriverState::homing: return wire::SERVO_DRIVER_STATE_HOMING;
+    case ServoDriverState::holding: return wire::SERVO_DRIVER_STATE_HOLDING;
+    case ServoDriverState::tracking: return wire::SERVO_DRIVER_STATE_TRACKING;
+    case ServoDriverState::error: return wire::SERVO_DRIVER_STATE_ERROR;
+    case ServoDriverState::stopped: return wire::SERVO_DRIVER_STATE_STOPPED;
+  }
+  throw std::invalid_argument("invalid servo driver state");
+}
+
+ServoDriverState from_wire(wire::ServoDriverState value) {
+  switch (value) {
+    case wire::SERVO_DRIVER_STATE_STARTING: return ServoDriverState::starting;
+    case wire::SERVO_DRIVER_STATE_HOMING: return ServoDriverState::homing;
+    case wire::SERVO_DRIVER_STATE_HOLDING: return ServoDriverState::holding;
+    case wire::SERVO_DRIVER_STATE_TRACKING: return ServoDriverState::tracking;
+    case wire::SERVO_DRIVER_STATE_ERROR: return ServoDriverState::error;
+    case wire::SERVO_DRIVER_STATE_STOPPED: return ServoDriverState::stopped;
+    default: throw std::invalid_argument("invalid servo driver state");
+  }
+}
+
+wire::ServoDecision to_wire(ServoDecision value) {
+  switch (value) {
+    case ServoDecision::home_startup: return wire::SERVO_DECISION_HOME_STARTUP;
+    case ServoDecision::applied: return wire::SERVO_DECISION_APPLIED;
+    case ServoDecision::held_deadband: return wire::SERVO_DECISION_HELD_DEADBAND;
+    case ServoDecision::held_missing: return wire::SERVO_DECISION_HELD_MISSING;
+    case ServoDecision::held_limit: return wire::SERVO_DECISION_HELD_LIMIT;
+    case ServoDecision::home_lost: return wire::SERVO_DECISION_HOME_LOST;
+    case ServoDecision::home_no_target: return wire::SERVO_DECISION_HOME_NO_TARGET;
+    case ServoDecision::home_stale: return wire::SERVO_DECISION_HOME_STALE;
+    case ServoDecision::home_upstream_timeout: return wire::SERVO_DECISION_HOME_UPSTREAM_TIMEOUT;
+    case ServoDecision::rejected_duplicate: return wire::SERVO_DECISION_REJECTED_DUPLICATE;
+    case ServoDecision::rejected_out_of_order: return wire::SERVO_DECISION_REJECTED_OUT_OF_ORDER;
+    case ServoDecision::rejected_invalid: return wire::SERVO_DECISION_REJECTED_INVALID;
+    case ServoDecision::error: return wire::SERVO_DECISION_ERROR;
+  }
+  throw std::invalid_argument("invalid servo decision");
+}
+
+ServoDecision from_wire(wire::ServoDecision value) {
+  switch (value) {
+    case wire::SERVO_DECISION_HOME_STARTUP: return ServoDecision::home_startup;
+    case wire::SERVO_DECISION_APPLIED: return ServoDecision::applied;
+    case wire::SERVO_DECISION_HELD_DEADBAND: return ServoDecision::held_deadband;
+    case wire::SERVO_DECISION_HELD_MISSING: return ServoDecision::held_missing;
+    case wire::SERVO_DECISION_HELD_LIMIT: return ServoDecision::held_limit;
+    case wire::SERVO_DECISION_HOME_LOST: return ServoDecision::home_lost;
+    case wire::SERVO_DECISION_HOME_NO_TARGET: return ServoDecision::home_no_target;
+    case wire::SERVO_DECISION_HOME_STALE: return ServoDecision::home_stale;
+    case wire::SERVO_DECISION_HOME_UPSTREAM_TIMEOUT: return ServoDecision::home_upstream_timeout;
+    case wire::SERVO_DECISION_REJECTED_DUPLICATE: return ServoDecision::rejected_duplicate;
+    case wire::SERVO_DECISION_REJECTED_OUT_OF_ORDER: return ServoDecision::rejected_out_of_order;
+    case wire::SERVO_DECISION_REJECTED_INVALID: return ServoDecision::rejected_invalid;
+    case wire::SERVO_DECISION_ERROR: return ServoDecision::error;
+    default: throw std::invalid_argument("invalid servo decision");
   }
 }
 }
@@ -327,6 +393,46 @@ PixelCenterControllerStatus decode_pixel_center_controller_status(std::span<cons
       .out_of_order_observations = message.out_of_order_observations(),
       .last_rejection_reason = message.has_last_rejection_reason() ? std::optional<std::string>(message.last_rejection_reason()) : std::nullopt,
   };
+}
+
+std::vector<std::uint8_t> encode(const PanTiltCommandedState& value) {
+  validate(value);
+  wire::PanTiltCommandedState message;
+  message.set_schema_version(value.schema_version);
+  message.set_updated_at_unix_ns(value.updated_at_unix_ns);
+  message.set_commanded_pan_deg(value.commanded_pan_deg);
+  message.set_commanded_tilt_deg(value.commanded_tilt_deg);
+  message.set_last_track_id(value.last_track_id);
+  message.set_state(to_wire(value.state));
+  message.set_decision(to_wire(value.decision));
+  message.set_pan_limit_held(value.pan_limit_held);
+  message.set_tilt_limit_held(value.tilt_limit_held);
+  message.set_pwm_active(value.pwm_active);
+  if (value.last_error) message.set_last_error(*value.last_error);
+  message.set_applied_commands(value.applied_commands);
+  message.set_rejected_commands(value.rejected_commands);
+  return serialize(message);
+}
+
+PanTiltCommandedState decode_pan_tilt_commanded_state(std::span<const std::uint8_t> bytes) {
+  const auto message = parse<wire::PanTiltCommandedState>(bytes);
+  PanTiltCommandedState value{
+      .schema_version = message.schema_version(),
+      .updated_at_unix_ns = message.updated_at_unix_ns(),
+      .commanded_pan_deg = message.commanded_pan_deg(),
+      .commanded_tilt_deg = message.commanded_tilt_deg(),
+      .last_track_id = message.last_track_id(),
+      .state = from_wire(message.state()),
+      .decision = from_wire(message.decision()),
+      .pan_limit_held = message.pan_limit_held(),
+      .tilt_limit_held = message.tilt_limit_held(),
+      .pwm_active = message.pwm_active(),
+      .last_error = message.has_last_error() ? std::optional<std::string>(message.last_error()) : std::nullopt,
+      .applied_commands = message.applied_commands(),
+      .rejected_commands = message.rejected_commands(),
+  };
+  validate(value);
+  return value;
 }
 
 }  // namespace face_tracking::codec

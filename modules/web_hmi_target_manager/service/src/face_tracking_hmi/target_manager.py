@@ -33,15 +33,22 @@ class _DetectionSnapshot:
 
 class TargetManager:
     def __init__(
-        self, *, lost_after_ms: int, reacquire_timeout_ms: int, selection_max_age_ms: int
+        self,
+        *,
+        missing_frame_threshold: int,
+        reacquire_timeout_ms: int,
+        selection_max_age_ms: int,
     ) -> None:
         self._lock = threading.Lock()
         self._history: deque[_DetectionSnapshot] = deque()
         self._selected: TargetSelection | None = None
         self._state = TrackingState.NO_TARGET
         self._last_seen_at_unix_ns = 0
+        self._lost_at_unix_ns = 0
         self._last_observation: SelectedTargetObservation | None = None
-        self._lost_after_ns = lost_after_ms * 1_000_000
+        self._missing_frame_threshold = missing_frame_threshold
+        self._missing_frames = 0
+        self._last_detection_sequence: int | None = None
         self._reacquire_timeout_ns = reacquire_timeout_ms * 1_000_000
         self._selection_max_age_ns = selection_max_age_ms * 1_000_000
 
@@ -59,15 +66,35 @@ class TargetManager:
                 return self._clear_locked()
             if not self._selected:
                 return None
+            if (
+                self._last_detection_sequence is not None
+                and result.sequence <= self._last_detection_sequence
+            ):
+                return None
+            self._last_detection_sequence = result.sequence
             box = next(
                 (item for item in result.boxes if item.track_id == self._selected.track_id), None
             )
             if box is not None:
                 self._state = TrackingState.TRACKING
                 self._last_seen_at_unix_ns = now
+                self._lost_at_unix_ns = 0
+                self._missing_frames = 0
                 self._last_observation = self._from_detection(result, box, TrackingState.TRACKING)
                 return self._last_observation
-            return self._advance_locked(now)
+            if self._state == TrackingState.LOST:
+                return self._advance_locked(now)
+            self._missing_frames += 1
+            next_state = (
+                TrackingState.LOST
+                if self._missing_frames >= self._missing_frame_threshold
+                else TrackingState.MISSING
+            )
+            if next_state == TrackingState.LOST:
+                self._lost_at_unix_ns = now
+            self._state = next_state
+            self._last_observation = self._from_missing(result, next_state)
+            return self._last_observation
 
     def select(
         self, selection: TargetSelection, *, now_unix_ns: int | None = None
@@ -89,6 +116,9 @@ class TargetManager:
                 self._selected = selection
                 self._state = TrackingState.TRACKING
                 self._last_seen_at_unix_ns = snapshot.received_at_unix_ns
+                self._lost_at_unix_ns = 0
+                self._missing_frames = 0
+                self._last_detection_sequence = result.sequence
                 self._last_observation = self._from_detection(result, box, TrackingState.TRACKING)
                 return self._last_observation
         raise TargetSelectionError("face selection is missing or stale")
@@ -109,17 +139,17 @@ class TargetManager:
                 "selected_tracker_instance_id": self._selected.tracker_instance_id
                 if self._selected
                 else None,
+                "missing_frames": self._missing_frames,
             }
 
     def _advance_locked(self, now: int) -> SelectedTargetObservation | None:
         if not self._selected or not self._last_observation:
             return None
-        age = now - self._last_seen_at_unix_ns
-        if self._state == TrackingState.TRACKING and age >= self._lost_after_ns:
-            self._state = TrackingState.LOST
-            self._last_observation = self._replace_state(self._last_observation, TrackingState.LOST)
-            return self._last_observation
-        if self._state == TrackingState.LOST and age >= self._reacquire_timeout_ns:
+        if (
+            self._state == TrackingState.LOST
+            and self._lost_at_unix_ns > 0
+            and now - self._lost_at_unix_ns >= self._reacquire_timeout_ns
+        ):
             return self._clear_locked()
         return None
 
@@ -127,6 +157,9 @@ class TargetManager:
         self._selected = None
         self._state = TrackingState.NO_TARGET
         self._last_seen_at_unix_ns = 0
+        self._lost_at_unix_ns = 0
+        self._missing_frames = 0
+        self._last_detection_sequence = None
         self._last_observation = SelectedTargetObservation(
             "", "", 0, 0, 0, 0, 0, 0, 0, TrackingState.NO_TARGET
         )
@@ -168,5 +201,23 @@ class TargetManager:
             value.target_center_y,
             value.image_width,
             value.image_height,
+            state,
+        )
+
+    def _from_missing(
+        self, result: DetectionResult, state: TrackingState
+    ) -> SelectedTargetObservation:
+        assert self._selected is not None
+        previous = self._last_observation
+        return SelectedTargetObservation(
+            result.source_instance_id,
+            result.tracker_instance_id,
+            result.sequence,
+            result.captured_at_unix_ns,
+            self._selected.track_id,
+            previous.target_center_x if previous else 0,
+            previous.target_center_y if previous else 0,
+            result.image_width,
+            result.image_height,
             state,
         )

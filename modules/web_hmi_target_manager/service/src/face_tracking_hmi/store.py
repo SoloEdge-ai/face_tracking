@@ -26,6 +26,8 @@ class LatestFrameStore:
         self._detection: StoredDetection | None = None
         self._controller_status: dict[str, object] = {}
         self._controller_command: dict[str, object] = {}
+        self._servo_state: dict[str, object] = {}
+        self._servo_received_at_unix_ns = 0
         self._stale_after_ms, self._offline_after_ms = stale_after_ms, offline_after_ms
 
     def update(self, jpeg: bytes, metadata: FrameMetadata, *, received_at_unix_ns: int | None = None) -> bool:
@@ -73,6 +75,30 @@ class LatestFrameStore:
                 "status": dict(self._controller_status),
                 "command": dict(self._controller_command),
             }
+
+    def update_servo_state(
+        self, state: dict[str, object], *, received_at_unix_ns: int | None = None
+    ) -> None:
+        with self._condition:
+            self._servo_state = dict(state)
+            self._servo_received_at_unix_ns = received_at_unix_ns or time.time_ns()
+
+    def servo_snapshot(self, *, now_unix_ns: int | None = None) -> dict[str, object]:
+        now = now_unix_ns or time.time_ns()
+        with self._condition:
+            state = dict(self._servo_state)
+            received_at = self._servo_received_at_unix_ns
+        if not state or received_at <= 0:
+            return {"freshness": "STARTING"}
+        age_ms = max(0.0, (now - received_at) / 1_000_000)
+        freshness = (
+            "OFFLINE"
+            if age_ms > self._offline_after_ms
+            else "STALE"
+            if age_ms > self._stale_after_ms
+            else "FRESH"
+        )
+        return {**state, "freshness": freshness, "state_age_ms": round(age_ms, 1)}
 
     def detection(self, *, now_unix_ns: int | None = None) -> DetectionResult | None:
         now = now_unix_ns or time.time_ns()

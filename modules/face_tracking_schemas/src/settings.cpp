@@ -25,6 +25,28 @@ TransportSettings load_transport(const YAML::Node& root) {
   }
   return settings;
 }
+
+ServoAxisSettings load_servo_axis(const YAML::Node& node) {
+  return {
+      .gpio = required<int>(node, "gpio"),
+      .rated_max_deg = required<float>(node, "rated_max_deg"),
+      .min_deg = required<float>(node, "min_deg"),
+      .max_deg = required<float>(node, "max_deg"),
+      .home_deg = required<float>(node, "home_deg"),
+      .min_pulse_us = required<int>(node, "min_pulse_us"),
+      .max_pulse_us = required<int>(node, "max_pulse_us"),
+      .invert = required<bool>(node, "invert"),
+  };
+}
+
+void validate_servo_axis(const ServoAxisSettings& axis) {
+  if (axis.gpio < 0 || axis.rated_max_deg <= 0 || axis.min_deg < 0 ||
+      axis.min_deg >= axis.max_deg || axis.max_deg > axis.rated_max_deg ||
+      axis.home_deg < axis.min_deg || axis.home_deg > axis.max_deg || axis.min_pulse_us <= 0 ||
+      axis.min_pulse_us >= axis.max_pulse_us) {
+    throw std::runtime_error("invalid servo axis configuration");
+  }
+}
 }
 
 CameraProcessSettings load_camera_process_settings(const std::filesystem::path& path) {
@@ -86,6 +108,30 @@ ControllerProcessSettings load_controller_process_settings(const std::filesystem
   return settings;
 }
 
+ServoProcessSettings load_servo_process_settings(const std::filesystem::path& path) {
+  const auto root = YAML::LoadFile(path.string());
+  const auto servo = root["servo"];
+  ServoProcessSettings settings{
+      .transport = load_transport(root),
+      .servo = {
+          .gpio_chip = required<int>(servo, "gpio_chip"),
+          .frequency_hz = required<int>(servo, "frequency_hz"),
+          .upstream_timeout_ms = required<int>(servo, "upstream_timeout_ms"),
+          .tracking_enabled = required<bool>(servo, "tracking_enabled"),
+          .pan = load_servo_axis(servo["pan"]),
+          .tilt = load_servo_axis(servo["tilt"]),
+      },
+  };
+  validate_servo_axis(settings.servo.pan);
+  validate_servo_axis(settings.servo.tilt);
+  if (settings.servo.gpio_chip < 0 || settings.servo.frequency_hz <= 0 ||
+      settings.servo.upstream_timeout_ms <= 0 ||
+      settings.servo.pan.gpio == settings.servo.tilt.gpio) {
+    throw std::runtime_error("invalid servo driver configuration");
+  }
+  return settings;
+}
+
 std::string TransportSettings::key(std::string_view suffix) const { return middleware.key_prefix + "/" + device_id + "/" + std::string(suffix); }
 std::string TransportSettings::camera_image_key() const { return key("camera/image"); }
 std::string TransportSettings::camera_status_key() const { return key("camera/status"); }
@@ -97,5 +143,7 @@ std::string TransportSettings::selected_target_key() const { return key("target/
 std::string TransportSettings::pan_tilt_delta_key() const { return key("pan_tilt/delta_cmd"); }
 std::string TransportSettings::controller_status_key() const { return key("diagnostics/pixel_center_controller"); }
 std::string TransportSettings::controller_liveliness_key() const { return key("liveliness/pixel_center_controller"); }
+std::string TransportSettings::pan_tilt_commanded_state_key() const { return key("pan_tilt/commanded_state"); }
+std::string TransportSettings::servo_liveliness_key() const { return key("liveliness/servo_driver"); }
 
 }  // namespace face_tracking

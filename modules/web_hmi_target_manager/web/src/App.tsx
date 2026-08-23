@@ -5,7 +5,7 @@ type CameraStatus = {
   width?: number; height?: number; hmi_fps?: number; frame_age_ms?: number; invalid_frames?: number;
   driver?: { last_error?: string | null; publish_fps?: number };
 };
-type TrackingState = "NO_TARGET" | "TRACKING" | "LOST";
+type TrackingState = "NO_TARGET" | "TRACKING" | "MISSING" | "LOST";
 type Box = { x: number; y: number; width: number; height: number; confidence: number; track_id: number };
 type Detection = {
   source_instance_id?: string; tracker_instance_id?: string; sequence?: number;
@@ -16,6 +16,12 @@ type Controller = {
   status?: { state?: string; observation_age_ms?: number; error_x_px?: number; error_y_px?: number; last_rejection_reason?: string | null };
   command?: { delta_pan_deg?: number; delta_tilt_deg?: number; reason?: string };
 };
+type ServoState = {
+  state?: string; freshness?: string; state_age_ms?: number;
+  commanded_pan_deg?: number; commanded_tilt_deg?: number;
+  decision?: string; pan_limit_held?: boolean; tilt_limit_held?: boolean;
+  pwm_active?: boolean; last_error?: string | null;
+};
 const initial: CameraStatus = { state: "STARTING" };
 const number = (value: number | undefined, suffix = "") => value === undefined ? "—" : `${value.toFixed(1)}${suffix}`;
 const wsUrl = (path: string) => `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}${path}`;
@@ -24,12 +30,14 @@ export function App() {
   const [status, setStatus] = useState<CameraStatus>(initial);
   const [detection, setDetection] = useState<Detection>({ boxes: [], tracking_state: "NO_TARGET" });
   const [controller, setController] = useState<Controller>({});
+  const [servo, setServo] = useState<ServoState>({});
   const [selectionError, setSelectionError] = useState<string | null>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
 
   useSocket("/ws/status", useCallback((value: CameraStatus) => setStatus(value), []));
   useSocket("/ws/detections", useCallback((value: Detection) => setDetection(value), []));
   useSocket("/ws/controller", useCallback((value: Controller) => setController(value), []));
+  useSocket("/ws/servo", useCallback((value: ServoState) => setServo(value), []));
 
   const faces = useMemo(
     () => [...detection.boxes].filter(face => face.track_id > 0).sort((a, b) => a.track_id - b.track_id),
@@ -111,7 +119,9 @@ export function App() {
     </section>
     <section className="metrics"><Metric label="分辨率" value={status.width && status.height ? `${status.width} × ${status.height}` : "—"} /><Metric label="HMI FPS" value={number(status.hmi_fps, " fps")} /><Metric label="帧龄" value={number(status.frame_age_ms, " ms")} /><Metric label="人脸" value={String(faces.length)} /></section>
     <section className="controller-grid"><Metric label="控制器" value={controller.status?.state || "—"} /><Metric label="像素误差 X / Y" value={`${number(controller.status?.error_x_px)} / ${number(controller.status?.error_y_px)}`} /><Metric label="Pan / Tilt 增量" value={`${number(controller.command?.delta_pan_deg, "°")} / ${number(controller.command?.delta_tilt_deg, "°")}`} /><Metric label="决策" value={controller.command?.reason || controller.status?.last_rejection_reason || "—"} /></section>
-    <section className="detail"><span>无效帧：{status.invalid_frames ?? 0}</span><span>相机错误：{status.driver?.last_error || "无"}</span><span>观测年龄：{number(controller.status?.observation_age_ms, " ms")}</span></section>
+    <section className="controller-grid"><Metric label="舵机驱动" value={`${servo.state || "—"} · ${servo.freshness || "STARTING"}`} /><Metric label="Pan 指令角" value={number(servo.commanded_pan_deg, "°")} /><Metric label="Tilt 指令角" value={number(servo.commanded_tilt_deg, "°")} /><Metric label="舵机决策" value={servo.decision || "—"} /></section>
+    <section className="detail"><span>软件指令角度，无舵机位置反馈</span><span>PWM：{servo.pwm_active ? "ACTIVE" : "INACTIVE"}</span><span>限位保持：{servo.pan_limit_held ? "PAN " : ""}{servo.tilt_limit_held ? "TILT" : "无"}</span><span>状态年龄：{number(servo.state_age_ms, " ms")}</span></section>
+    <section className="detail"><span>无效帧：{status.invalid_frames ?? 0}</span><span>相机错误：{status.driver?.last_error || "无"}</span><span>舵机错误：{servo.last_error || "无"}</span><span>观测年龄：{number(controller.status?.observation_age_ms, " ms")}</span></section>
   </main>;
 }
 

@@ -50,11 +50,20 @@ void validate(const PanTiltDelta& command) {
   if (command.computed_at_unix_ns <= 0 || !std::isfinite(command.delta_pan_deg) || !std::isfinite(command.delta_tilt_deg)) {
     throw std::invalid_argument("controller command is invalid");
   }
-  if (command.reason == ControllerDecision::applied || command.reason == ControllerDecision::deadband) {
+  if (command.reason == ControllerDecision::applied || command.reason == ControllerDecision::deadband ||
+      command.reason == ControllerDecision::missing_hold) {
     if (command.source_instance_id.empty() || command.tracker_instance_id.empty() ||
         command.captured_at_unix_ns <= 0 || command.selected_track_id == 0) {
       throw std::invalid_argument("controller command identity is invalid");
     }
+  }
+}
+
+void validate(const PanTiltCommandedState& state) {
+  if (state.schema_version != kSchemaVersion) throw std::invalid_argument("unsupported schema version");
+  if (state.updated_at_unix_ns <= 0 || !std::isfinite(state.commanded_pan_deg) ||
+      !std::isfinite(state.commanded_tilt_deg)) {
+    throw std::invalid_argument("servo commanded state is invalid");
   }
 }
 

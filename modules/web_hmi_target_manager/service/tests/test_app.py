@@ -35,6 +35,16 @@ def test_health_works_without_camera() -> None:
     assert TestClient(create_app(LatestFrameStore())).get("/healthz").json() == {"status": "ok"}
 
 
+def test_servo_status_endpoint_exposes_software_commanded_angles() -> None:
+    store = LatestFrameStore()
+    store.update_servo_state(
+        {"state": "HOLDING", "commanded_pan_deg": 135.0, "commanded_tilt_deg": 10.0}
+    )
+    payload = TestClient(create_app(store)).get("/api/servo/status").json()
+    assert payload["commanded_pan_deg"] == 135.0
+    assert payload["commanded_tilt_deg"] == 10.0
+
+
 def test_detection_websocket_pushes_boxes() -> None:
     store = LatestFrameStore()
     store.update_detection(DetectionResult("camera", "", 4, 1, 1280, 720, 8.5, (DetectionBox(1, 2, 30, 40, 0.9),)))
@@ -46,7 +56,7 @@ def test_detection_websocket_pushes_boxes() -> None:
 
 def test_user_can_select_and_clear_a_recent_tracked_face() -> None:
     store = LatestFrameStore()
-    manager = TargetManager(lost_after_ms=400, reacquire_timeout_ms=1000, selection_max_age_ms=1000)
+    manager = TargetManager(missing_frame_threshold=5, reacquire_timeout_ms=1000, selection_max_age_ms=1000)
     transport = FakeTransport()
     result = DetectionResult(
         "camera", "tracker", 4, 1, 1280, 720, 8.5,

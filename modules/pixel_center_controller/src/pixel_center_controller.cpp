@@ -81,6 +81,18 @@ std::optional<PanTiltDelta> PixelCenterController::process(
     state.status.last_rejection_reason = "LOST";
     return zero_command(observation, now_unix_ns, ControllerDecision::lost);
   }
+  if (observation.tracking_state == TrackingState::missing) {
+    state.last_tracking = observation;
+    state.last_image_key = image_key;
+    state.stale_emitted = false;
+    state.status.state = PixelCenterControllerState::holding;
+    state.status.last_delta_pan_deg = 0;
+    state.status.last_delta_tilt_deg = 0;
+    state.status.observation_age_ms =
+        (now_unix_ns - observation.captured_at_unix_ns) / 1'000'000.0;
+    state.status.last_rejection_reason = "MISSING_HOLD";
+    return zero_command(observation, now_unix_ns, ControllerDecision::missing_hold);
+  }
 
   state.last_tracking = observation;
   state.stale_emitted = false;

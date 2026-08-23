@@ -49,7 +49,7 @@ def create_app(
     target_manager: TargetManager | None = None,
 ) -> FastAPI:
     target_manager = target_manager or TargetManager(
-        lost_after_ms=400, reacquire_timeout_ms=1000, selection_max_age_ms=1000
+        missing_frame_threshold=5, reacquire_timeout_ms=1000, selection_max_age_ms=1000
     )
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
@@ -78,6 +78,10 @@ def create_app(
     @app.get("/api/controller/status")
     def controller_status() -> JSONResponse:
         return JSONResponse(store.controller_snapshot())
+
+    @app.get("/api/servo/status")
+    def servo_status() -> JSONResponse:
+        return JSONResponse(store.servo_snapshot())
 
     @app.get("/api/faces")
     def faces() -> JSONResponse:
@@ -156,6 +160,16 @@ def create_app(
         try:
             while True:
                 await websocket.send_json(store.controller_snapshot())
+                await asyncio.sleep(0.2)
+        except WebSocketDisconnect:
+            return
+
+    @app.websocket("/ws/servo")
+    async def servo_socket(websocket: WebSocket) -> None:
+        await websocket.accept()
+        try:
+            while True:
+                await websocket.send_json(store.servo_snapshot())
                 await asyncio.sleep(0.2)
         except WebSocketDisconnect:
             return
