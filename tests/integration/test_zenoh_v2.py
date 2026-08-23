@@ -32,7 +32,7 @@ def test_cpp_publishers_are_python_decodable() -> None:
 
     def record(name: str, decoder: type[object], *, attachment: bool = False):
         def callback(sample: object) -> None:
-            source = getattr(sample, "attachment") if attachment else getattr(sample, "payload")
+            source = sample.attachment if attachment else sample.payload  # type: ignore[attr-defined]
             message = decoder.FromString(bytes(source))  # type: ignore[attr-defined]
             with condition:
                 received[name].append(message)
@@ -129,7 +129,7 @@ def test_controller_uses_synthetic_target_when_no_real_face_is_present() -> None
 
     def on_command(sample: object) -> None:
         with condition:
-            commands.append(wire.PanTiltDelta.FromString(bytes(getattr(sample, "payload"))))
+            commands.append(wire.PanTiltDelta.FromString(bytes(sample.payload)))  # type: ignore[attr-defined]
             condition.notify_all()
 
     config = zenoh.Config()
