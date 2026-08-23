@@ -3,11 +3,11 @@ from pathlib import Path
 from face_tracking_hmi.generated import face_tracking_v2_pb2 as wire
 from face_tracking_hmi.protocol import (
     decode_camera_status,
+    decode_controller_status,
     decode_detection,
     decode_detector_status,
     decode_frame_metadata,
     decode_pan_tilt_delta,
-    decode_controller_status,
 )
 
 

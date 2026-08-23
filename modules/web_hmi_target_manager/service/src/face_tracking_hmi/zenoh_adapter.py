@@ -8,10 +8,10 @@ from .config import Settings
 from .protocol import (
     ProtocolError,
     decode_camera_status,
+    decode_controller_status,
     decode_detection,
     decode_detector_status,
     decode_frame_metadata,
-    decode_controller_status,
     decode_pan_tilt_delta,
     encode_selected_target,
 )
