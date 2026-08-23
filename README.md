@@ -8,7 +8,7 @@ Raspberry Pi 5 face-detection pipeline with modular C++ camera and detector proc
 - `modules/camera_service`: UVC capture, latest-frame buffering, JPEG encoding and rate limiting.
 - `modules/face_detector_tracker`: OpenCV DNN inference, latest-only scheduling, YOLO post-processing and stable short-term face tracks.
 - `modules/pixel_center_controller`: middleware-neutral target validation and bounded pixel-centering P control.
-- `modules/servo_driver`: middleware-neutral command validation, commanded-angle state machine, soft limits, and the Raspberry Pi lgpio PWM backend.
+- `modules/servo_driver`: middleware-neutral command validation, commanded-angle state machine, soft limits, and the Raspberry Pi kernel hardware-PWM backend.
 - `adapters/zenoh`: Zenoh publishers/subscriber and the C++ process entrypoints.
 - `modules/web_hmi_target_manager`: FastAPI HMI service, transport adapter, and React application.
 - `modules/pan_tilt_bringup`: safe `zenohd` handover and child-process lifecycle.
@@ -21,6 +21,7 @@ Business modules do not include Zenoh, Protobuf, or ROS types in their interface
 cd /home/friden/Code/face_tracking
 chmod +x setup.sh run.sh
 ./setup.sh
+# Reboot once if setup reports that it added the PWM overlay.
 ./run.sh
 ```
 
@@ -46,7 +47,9 @@ Keys remain under `face_tracking/{device_id}`:
 
 Every detection includes a tracker-process identity plus a `track_id`; the pair is the stable selection identity. The controller runs at 20 Hz and accepts only fresh `TRACKING` observations. It applies a 30 px horizontal and 24 px vertical deadband, 0.01 degree/px proportional gain, and per-frame limits of 1.5 degrees pan and 1.0 degree tilt. MISSING, deadband, duplicate, and out-of-order decisions hold the current commanded angles; LOST, NO_TARGET, stale observations, controller liveliness loss, or 1.5 seconds without valid controller activity return to Home.
 
-The servo driver uses GPIO17 for the 270-degree Pan servo and GPIO27 for the 180-degree Tilt servo. Home is Pan 135 degrees / Tilt 20 degrees. Pan is limited to its rated 0-270 degree range; Tilt has a 15-45 degree tracking soft limit. A candidate that crosses a limit leaves that axis unchanged instead of saturating it, while the other axis may still move. Both axes default to a nominal 500-2500 microsecond pulse mapping at 50 Hz. Use an independent servo power supply with a common ground, and verify each axis direction with a small unloaded movement before sustained tracking.
+The servo driver uses GPIO18 (physical Pin 12, PWM0 channel 2) for the lower 270-degree Pan servo and GPIO19 (physical Pin 35, PWM0 channel 3) for the upper 180-degree Tilt servo. These pins were chosen because each exposes a separate Raspberry Pi 5 hardware-PWM channel on the 40-pin header. The kernel PWM peripheral therefore maintains the 50 Hz waveform without user-space scheduling jitter, unlike the previous software-timed GPIO17/GPIO27 output. Enable it with `dtoverlay=pwm-2chan,pin=18,func=2,pin2=19,func2=2`; these pins must not simultaneously be assigned to I2S/audio.
+
+Home is Pan 135 degrees / Tilt 20 degrees. Pan has a 100-170 degree tracking and test soft limit; Tilt has a 15-45 degree tracking and test soft limit. A candidate that crosses a limit leaves that axis unchanged instead of saturating it, while the other axis may still move. Both axes default to a nominal 500-2500 microsecond pulse mapping at 50 Hz. Use an independent servo power supply with a common ground, and verify each axis direction with a small unloaded movement before sustained tracking.
 
 With the normal system stopped, the standalone hardware sweep can continuously exercise both servos inside those configured limits. It starts at Home, advances by 1 degree every 50 ms, reverses independently at each endpoint, and releases PWM on Ctrl+C:
 

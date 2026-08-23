@@ -7,7 +7,7 @@
 #include <thread>
 
 #include "face_tracking/schemas/settings.hpp"
-#include "face_tracking/servo/lgpio_pwm.hpp"
+#include "face_tracking/servo/hardware_pwm.hpp"
 #include "face_tracking/servo/servo_driver.hpp"
 #include "face_tracking/zenoh/zenoh_adapter.hpp"
 
@@ -27,7 +27,7 @@ int main() {
     if (settings.transport.middleware.adapter != "zenoh") {
       throw std::runtime_error("servo Zenoh executable requires middleware.adapter=zenoh");
     }
-    face_tracking::servo::LgpioServoPwm pwm;
+    face_tracking::servo::LinuxHardwareServoPwm pwm;
     face_tracking::zenoh_adapter::ServoTransport transport(settings.transport);
     face_tracking::servo::ServoDriverService service(settings.servo, pwm, transport);
     std::jthread signal_monitor([&source](std::stop_token token) {

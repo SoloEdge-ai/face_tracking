@@ -69,7 +69,7 @@ ServoDriver::~ServoDriver() = default;
 
 const PanTiltCommandedState& ServoDriver::start(std::int64_t now) {
   auto& driver = *implementation_;
-  driver.pwm.start(driver.settings.gpio_chip);
+  driver.pwm.start(driver.settings.pwm_chip);
   driver.started = true;
   driver.last_upstream_at_unix_ns = now;
   driver.state.state = ServoDriverState::homing;

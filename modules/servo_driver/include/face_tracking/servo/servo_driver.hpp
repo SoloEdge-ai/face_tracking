@@ -16,7 +16,7 @@ enum class UpstreamEvent { activity, online, offline };
 class ServoPwmPort {
  public:
   virtual ~ServoPwmPort() = default;
-  virtual void start(int gpio_chip) = 0;
+  virtual void start(int pwm_chip) = 0;
   virtual void set_pulse(int gpio, int pulse_us, int frequency_hz) = 0;
   virtual void stop() noexcept = 0;
 };

@@ -117,7 +117,7 @@ def test_cpp_publishers_are_python_decodable() -> None:
     assert received["frames"][-1].source_instance_id
     assert received["camera"][-1].publish_fps <= 11.5
     assert received["servo"][-1].pwm_active
-    assert 0.0 <= received["servo"][-1].commanded_pan_deg <= 270.0
+    assert 100.0 <= received["servo"][-1].commanded_pan_deg <= 170.0
     assert 15.0 <= received["servo"][-1].commanded_tilt_deg <= 45.0
     if os.environ.get("FACE_TRACKING_PI_PERFORMANCE") == "1":
         detector_samples = received["detector"][-5:]

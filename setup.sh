@@ -4,10 +4,12 @@ set -euo pipefail
 root_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$root_dir"
 
+./scripts/configure_hardware_pwm.sh
+
 sudo apt-get update
 sudo apt-get install -y \
   ca-certificates cmake curl g++ git libavcodec-dev libavformat-dev libavutil-dev libgtest-dev libopencv-dev libprotobuf-dev \
-  liblgpio-dev libswscale-dev libyaml-cpp-dev libzenohc-dev=1.10.0 nodejs npm protobuf-compiler \
+  libswscale-dev libyaml-cpp-dev libzenohc-dev=1.10.0 nodejs npm protobuf-compiler \
   python3-eclipse-zenoh=1.10.0 python3-protobuf python3-venv
 
 sha256sum --check models/yolov8n-face-lindevs.onnx.sha256
@@ -37,4 +39,4 @@ npm run typecheck
 npm run build
 popd >/dev/null
 
-echo "Setup complete. Start with: ./run.sh"
+echo "Setup complete. If the PWM overlay was newly added, reboot once; then start with: ./run.sh"

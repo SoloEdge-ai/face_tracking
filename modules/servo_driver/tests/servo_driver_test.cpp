@@ -9,18 +9,19 @@
 #include <vector>
 
 #include "face_tracking/servo/servo_driver.hpp"
+#include "face_tracking/servo/hardware_pwm.hpp"
 #include "face_tracking/servo/servo_sweep.hpp"
 
 namespace {
 class FakePwm final : public face_tracking::servo::ServoPwmPort {
  public:
-  void start(int chip) override { gpio_chip = chip; }
+  void start(int chip) override { pwm_chip = chip; }
   void set_pulse(int gpio, int pulse_us, int frequency_hz) override {
     pulses.emplace_back(gpio, pulse_us, frequency_hz);
   }
   void stop() noexcept override { stopped = true; }
 
-  int gpio_chip{-1};
+  int pwm_chip{-1};
   bool stopped{};
   std::vector<std::tuple<int, int, int>> pulses;
 };
@@ -71,15 +72,15 @@ std::int64_t system_now_ns() {
 
 face_tracking::ServoDriverSettings settings() {
   return {
-      .gpio_chip = 0,
+      .pwm_chip = 0,
       .frequency_hz = 50,
       .upstream_timeout_ms = 1500,
       .max_input_pan_delta_deg = 1.5,
       .max_input_tilt_delta_deg = 1.0,
       .tracking_enabled = true,
-      .pan = {.gpio = 17, .rated_max_deg = 270, .min_deg = 0, .max_deg = 270,
+      .pan = {.gpio = 18, .rated_max_deg = 270, .min_deg = 100, .max_deg = 170,
               .home_deg = 135, .min_pulse_us = 500, .max_pulse_us = 2500},
-      .tilt = {.gpio = 27, .rated_max_deg = 180, .min_deg = 15, .max_deg = 45,
+      .tilt = {.gpio = 19, .rated_max_deg = 180, .min_deg = 15, .max_deg = 45,
                .home_deg = 20, .min_pulse_us = 500, .max_pulse_us = 2500},
   };
 }
@@ -105,12 +106,20 @@ TEST(ServoDriver, StartsAtHomeWithNominalPulseMapping) {
   face_tracking::servo::ServoDriver driver(settings(), pwm);
   const auto& state = driver.start(1'100'000'000);
   ASSERT_EQ(pwm.pulses.size(), 2U);
-  EXPECT_EQ(pwm.pulses[0], std::make_tuple(17, 1500, 50));
-  EXPECT_EQ(pwm.pulses[1], std::make_tuple(27, 722, 50));
+  EXPECT_EQ(pwm.pulses[0], std::make_tuple(18, 1500, 50));
+  EXPECT_EQ(pwm.pulses[1], std::make_tuple(19, 722, 50));
   EXPECT_FLOAT_EQ(state.commanded_pan_deg, 135);
   EXPECT_FLOAT_EQ(state.commanded_tilt_deg, 20);
   EXPECT_EQ(state.decision, face_tracking::ServoDecision::home_startup);
   EXPECT_TRUE(state.pwm_active);
+}
+
+TEST(HardwarePwm, MapsRaspberryPi5HeaderPinsToIndependentChannels) {
+  using face_tracking::servo::LinuxHardwareServoPwm;
+  EXPECT_EQ(LinuxHardwareServoPwm::channel_for_gpio(18), 2);
+  EXPECT_EQ(LinuxHardwareServoPwm::channel_for_gpio(19), 3);
+  EXPECT_THROW((void)LinuxHardwareServoPwm::channel_for_gpio(17), std::invalid_argument);
+  EXPECT_THROW((void)LinuxHardwareServoPwm::channel_for_gpio(27), std::invalid_argument);
 }
 
 TEST(ServoDriver, HoldsOnlyTheAxisWhoseCandidateWouldExceedItsLimit) {
@@ -142,6 +151,36 @@ TEST(ServoDriver, HoldsTiltAtMinimumBoundary) {
       command(0, -1, face_tracking::ControllerDecision::applied, 6), 1'100'000'006);
   EXPECT_FLOAT_EQ(state.commanded_tilt_deg, 15);
   EXPECT_TRUE(state.tilt_limit_held);
+  EXPECT_EQ(state.decision, face_tracking::ServoDecision::held_limit);
+}
+
+TEST(ServoDriver, HoldsPanAtMaximumBoundary) {
+  FakePwm pwm;
+  face_tracking::servo::ServoDriver driver(settings(), pwm);
+  driver.start(1'100'000'000);
+  for (std::uint64_t sequence = 1; sequence <= 35; ++sequence) {
+    driver.process(command(1, 0, face_tracking::ControllerDecision::applied, sequence),
+                   1'100'000'000 + static_cast<std::int64_t>(sequence));
+  }
+  const auto& state = driver.process(
+      command(1, 0, face_tracking::ControllerDecision::applied, 36), 1'100'000'036);
+  EXPECT_FLOAT_EQ(state.commanded_pan_deg, 170);
+  EXPECT_TRUE(state.pan_limit_held);
+  EXPECT_EQ(state.decision, face_tracking::ServoDecision::held_limit);
+}
+
+TEST(ServoDriver, HoldsPanAtMinimumBoundary) {
+  FakePwm pwm;
+  face_tracking::servo::ServoDriver driver(settings(), pwm);
+  driver.start(1'100'000'000);
+  for (std::uint64_t sequence = 1; sequence <= 35; ++sequence) {
+    driver.process(command(-1, 0, face_tracking::ControllerDecision::applied, sequence),
+                   1'100'000'000 + static_cast<std::int64_t>(sequence));
+  }
+  const auto& state = driver.process(
+      command(-1, 0, face_tracking::ControllerDecision::applied, 36), 1'100'000'036);
+  EXPECT_FLOAT_EQ(state.commanded_pan_deg, 100);
+  EXPECT_TRUE(state.pan_limit_held);
   EXPECT_EQ(state.decision, face_tracking::ServoDecision::held_limit);
 }
 
@@ -266,12 +305,12 @@ TEST(ServoSweep, AlwaysStaysInsideBothConfiguredLimits) {
   bool saw_tilt_max = false;
   for (int tick = 0; tick < 1000; ++tick) {
     const auto& position = sweep.next();
-    EXPECT_GE(position.pan_deg, 0);
-    EXPECT_LE(position.pan_deg, 270);
+    EXPECT_GE(position.pan_deg, 100);
+    EXPECT_LE(position.pan_deg, 170);
     EXPECT_GE(position.tilt_deg, 15);
     EXPECT_LE(position.tilt_deg, 45);
-    saw_pan_min |= position.pan_deg == 0;
-    saw_pan_max |= position.pan_deg == 270;
+    saw_pan_min |= position.pan_deg == 100;
+    saw_pan_max |= position.pan_deg == 170;
     saw_tilt_min |= position.tilt_deg == 15;
     saw_tilt_max |= position.tilt_deg == 45;
   }

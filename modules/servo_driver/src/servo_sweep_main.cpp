@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <chrono>
 #include <csignal>
 #include <cstdint>
@@ -9,13 +10,24 @@
 
 #include "face_tracking/schemas/settings.hpp"
 #include "face_tracking/schemas/types.hpp"
-#include "face_tracking/servo/lgpio_pwm.hpp"
+#include "face_tracking/servo/hardware_pwm.hpp"
 #include "face_tracking/servo/servo_driver.hpp"
 #include "face_tracking/servo/servo_sweep.hpp"
 
 namespace {
 volatile std::sig_atomic_t interrupted = 0;
 void stop(int) { interrupted = 1; }
+
+void wait_interruptibly(std::chrono::milliseconds duration) {
+  constexpr auto poll_interval = std::chrono::milliseconds(20);
+  const auto deadline = std::chrono::steady_clock::now() + duration;
+  while (!interrupted) {
+    const auto remaining = std::chrono::duration_cast<std::chrono::milliseconds>(
+        deadline - std::chrono::steady_clock::now());
+    if (remaining <= std::chrono::milliseconds::zero()) return;
+    std::this_thread::sleep_for(std::min(remaining, poll_interval));
+  }
+}
 
 std::int64_t now_unix_ns() {
   return std::chrono::duration_cast<std::chrono::nanoseconds>(
@@ -39,13 +51,13 @@ int main(int argc, char** argv) {
     std::signal(SIGTERM, stop);
     const auto settings = face_tracking::load_servo_process_settings(config_path);
     face_tracking::servo::ServoSweep sweep(settings.servo, step_deg);
-    face_tracking::servo::LgpioServoPwm pwm;
+    face_tracking::servo::LinuxHardwareServoPwm pwm;
     face_tracking::servo::ServoDriver driver(settings.servo, pwm);
     driver.start(now_unix_ns());
     std::cout << "Servo sweep started at Home: Pan " << driver.state().commanded_pan_deg
               << " deg, Tilt " << driver.state().commanded_tilt_deg
               << " deg. Press Ctrl+C to stop.\n";
-    std::this_thread::sleep_for(std::chrono::seconds(1));
+    wait_interruptibly(std::chrono::seconds(1));
 
     std::uint64_t sequence = 1;
     std::uint64_t log_counter = 0;
@@ -69,7 +81,7 @@ int main(int argc, char** argv) {
         std::cout << "Pan " << state.commanded_pan_deg << " deg, Tilt "
                   << state.commanded_tilt_deg << " deg\n";
       }
-      std::this_thread::sleep_for(std::chrono::milliseconds(interval_ms));
+      wait_interruptibly(std::chrono::milliseconds(interval_ms));
     }
     driver.stop(now_unix_ns());
     std::cout << "Servo sweep stopped; PWM released.\n";

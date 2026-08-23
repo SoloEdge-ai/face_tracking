@@ -37,23 +37,23 @@ controller:
   observation_timeout_ms: 600
 
 servo:
-  gpio_chip: 0
+  pwm_chip: 0
   frequency_hz: 50
   upstream_timeout_ms: 1500
   max_input_pan_delta_deg: 1.5
   max_input_tilt_delta_deg: 1.0
   tracking_enabled: true
   pan:
-    gpio: 17
+    gpio: 18
     rated_max_deg: 270
-    min_deg: 0
-    max_deg: 270
+    min_deg: 100
+    max_deg: 170
     home_deg: 135
     min_pulse_us: 500
     max_pulse_us: 2500
     invert: false
   tilt:
-    gpio: 27
+    gpio: 19
     rated_max_deg: 180
     min_deg: 15
     max_deg: 45

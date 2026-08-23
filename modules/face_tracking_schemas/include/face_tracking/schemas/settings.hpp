@@ -68,7 +68,7 @@ struct ServoAxisSettings {
 };
 
 struct ServoDriverSettings {
-  int gpio_chip{};
+  int pwm_chip{};
   int frequency_hz{};
   int upstream_timeout_ms{};
   float max_input_pan_delta_deg{};

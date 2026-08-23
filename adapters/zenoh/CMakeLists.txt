@@ -14,6 +14,6 @@ add_executable(face_tracking_controller_zenoh apps/controller_main.cpp)
 target_link_libraries(face_tracking_controller_zenoh PRIVATE face_tracking::controller face_tracking::zenoh)
 
 add_executable(face_tracking_servo_zenoh apps/servo_main.cpp)
-target_link_libraries(face_tracking_servo_zenoh PRIVATE face_tracking::servo face_tracking::servo_lgpio face_tracking::zenoh)
+target_link_libraries(face_tracking_servo_zenoh PRIVATE face_tracking::servo face_tracking::servo_hardware_pwm face_tracking::zenoh)
 
 install(TARGETS face_tracking_camera_zenoh face_tracking_detector_zenoh face_tracking_controller_zenoh face_tracking_servo_zenoh RUNTIME DESTINATION bin)
