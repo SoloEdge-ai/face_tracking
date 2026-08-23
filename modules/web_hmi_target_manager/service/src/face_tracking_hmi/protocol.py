@@ -1,0 +1,95 @@
+from __future__ import annotations
+
+from .domain import DetectionBox, DetectionResult, FrameMetadata
+from .generated import face_tracking_v2_pb2 as wire
+
+
+class ProtocolError(ValueError):
+    pass
+
+
+def decode_frame_metadata(payload: bytes) -> FrameMetadata:
+    try:
+        message = wire.FrameMetadata.FromString(payload)
+        value = FrameMetadata(message.source_instance_id, message.sequence, message.captured_at_unix_ns, message.width, message.height, message.capture_format, message.jpeg_quality, message.schema_version)
+        if value.schema_version != 2 or not value.source_instance_id or value.captured_at_unix_ns <= 0:
+            raise ProtocolError("invalid frame metadata")
+        return value
+    except ProtocolError:
+        raise
+    except Exception as exc:
+        raise ProtocolError("invalid frame metadata protobuf") from exc
+
+
+def decode_detection(payload: bytes) -> DetectionResult:
+    try:
+        message = wire.DetectionResult.FromString(payload)
+        value = DetectionResult(
+            message.source_instance_id, message.sequence, message.captured_at_unix_ns,
+            message.image_width, message.image_height, message.inference_ms,
+            tuple(DetectionBox(box.x, box.y, box.width, box.height, box.confidence) for box in message.boxes),
+            message.schema_version,
+        )
+        if value.schema_version != 2 or not value.source_instance_id:
+            raise ProtocolError("invalid detection result")
+        return value
+    except ProtocolError:
+        raise
+    except Exception as exc:
+        raise ProtocolError("invalid detection protobuf") from exc
+
+
+def decode_camera_status(payload: bytes) -> dict[str, object]:
+    try:
+        message = wire.CameraStatus.FromString(payload)
+        if message.schema_version != 2:
+            raise ProtocolError("unsupported camera status version")
+        states = {wire.CAMERA_STATE_STARTING: "STARTING", wire.CAMERA_STATE_STREAMING: "STREAMING", wire.CAMERA_STATE_RECONNECTING: "RECONNECTING", wire.CAMERA_STATE_ERROR: "ERROR", wire.CAMERA_STATE_STOPPED: "STOPPED"}
+        return {
+            "schema_version": message.schema_version, "state": states.get(message.state, "STARTING"),
+            "capture_fps": message.capture_fps, "publish_fps": message.publish_fps,
+            "captured_frames": message.captured_frames, "published_frames": message.published_frames,
+            "dropped_frames": message.dropped_frames, "device_path": message.device_path,
+            "last_error": message.last_error if message.HasField("last_error") else None,
+        }
+    except ProtocolError:
+        raise
+    except Exception as exc:
+        raise ProtocolError("invalid camera status protobuf") from exc
+
+
+def decode_detector_status(payload: bytes) -> dict[str, object]:
+    try:
+        message = wire.DetectorStatus.FromString(payload)
+        if message.schema_version != 2:
+            raise ProtocolError("unsupported detector status version")
+        states = {
+            wire.DETECTOR_STATE_STARTING: "STARTING",
+            wire.DETECTOR_STATE_STREAMING: "STREAMING",
+            wire.DETECTOR_STATE_ERROR: "ERROR",
+            wire.DETECTOR_STATE_STOPPED: "STOPPED",
+        }
+        return {
+            "schema_version": message.schema_version,
+            "state": states.get(message.state, "STARTING"),
+            "inference_fps": message.inference_fps,
+            "processed_frames": message.processed_frames,
+            "dropped_frames": message.dropped_frames,
+            "decode_errors": message.decode_errors,
+            "inference_errors": message.inference_errors,
+            "last_error": message.last_error if message.HasField("last_error") else None,
+        }
+    except ProtocolError:
+        raise
+    except Exception as exc:
+        raise ProtocolError("invalid detector status protobuf") from exc
+
+
+def detection_as_dict(result: DetectionResult) -> dict[str, object]:
+    return {
+        "schema_version": result.schema_version, "source_instance_id": result.source_instance_id,
+        "sequence": result.sequence, "captured_at_unix_ns": result.captured_at_unix_ns,
+        "image_width": result.image_width, "image_height": result.image_height,
+        "inference_ms": result.inference_ms,
+        "boxes": [{"x": box.x, "y": box.y, "width": box.width, "height": box.height, "confidence": box.confidence} for box in result.boxes],
+    }

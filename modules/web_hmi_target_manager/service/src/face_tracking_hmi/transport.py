@@ -1,0 +1,6 @@
+from typing import Protocol
+
+
+class TransportAdapter(Protocol):
+    def start(self) -> None: ...
+    def stop(self) -> None: ...
