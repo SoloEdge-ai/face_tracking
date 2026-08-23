@@ -31,10 +31,14 @@ def test_cpp_golden_fixtures_decode() -> None:
     detection_bytes = bytes.fromhex((fixtures / "detection_result_v2.hex").read_text().strip())
     camera_bytes = bytes.fromhex((fixtures / "camera_status_v2.hex").read_text().strip())
     detector_bytes = bytes.fromhex((fixtures / "detector_status_v2.hex").read_text().strip())
+    servo_bytes = bytes.fromhex(
+        (fixtures / "pan_tilt_commanded_state_v2.hex").read_text().strip()
+    )
     frame = decode_frame_metadata(frame_bytes)
     detection = decode_detection(detection_bytes)
     camera = decode_camera_status(camera_bytes)
     detector = decode_detector_status(detector_bytes)
+    servo = decode_servo_commanded_state(servo_bytes)
     assert frame.source_instance_id == "camera-a"
     assert frame.sequence == 7
     assert frame.captured_at_unix_ns == 123456
@@ -56,6 +60,9 @@ def test_cpp_golden_fixtures_decode() -> None:
     assert detector["state"] == "ERROR"
     assert detector["inference_fps"] == 4.25
     assert detector["last_error"] == "boom"
+    assert servo["commanded_pan_deg"] == 135.0
+    assert servo["commanded_tilt_deg"] == 10.0
+    assert servo["decision"] == "HELD_MISSING"
 
     frame_wire = wire.FrameMetadata(
         schema_version=2,
@@ -97,10 +104,24 @@ def test_cpp_golden_fixtures_decode() -> None:
         inference_errors=1,
         last_error="boom",
     )
+    servo_wire = wire.PanTiltCommandedState(
+        schema_version=2,
+        updated_at_unix_ns=2_300_000_000,
+        commanded_pan_deg=135.0,
+        commanded_tilt_deg=10.0,
+        last_track_id=42,
+        state=wire.SERVO_DRIVER_STATE_HOLDING,
+        decision=wire.SERVO_DECISION_HELD_MISSING,
+        tilt_limit_held=True,
+        pwm_active=True,
+        applied_commands=7,
+        rejected_commands=1,
+    )
     assert frame_wire.SerializeToString() == frame_bytes
     assert detection_wire.SerializeToString() == detection_bytes
     assert camera_wire.SerializeToString() == camera_bytes
     assert detector_wire.SerializeToString() == detector_bytes
+    assert servo_wire.SerializeToString() == servo_bytes
 
 
 def test_detector_status_protobuf_decodes() -> None:

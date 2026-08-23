@@ -171,6 +171,16 @@ TEST(Schemas, MissingTargetAndServoCommandedStateRoundTrip) {
   EXPECT_TRUE(decoded.pwm_active);
 }
 
+TEST(Schemas, PythonGoldenServoCommandedStateRoundTripsByteForByte) {
+  const auto bytes = fixture("pan_tilt_commanded_state_v2.hex");
+  const auto decoded = face_tracking::codec::decode_pan_tilt_commanded_state(bytes);
+  EXPECT_EQ(face_tracking::codec::encode(decoded), bytes);
+  EXPECT_FLOAT_EQ(decoded.commanded_pan_deg, 135.0F);
+  EXPECT_FLOAT_EQ(decoded.commanded_tilt_deg, 10.0F);
+  EXPECT_EQ(decoded.decision, face_tracking::ServoDecision::held_missing);
+  EXPECT_TRUE(decoded.pwm_active);
+}
+
 TEST(Schemas, PythonGoldenCameraStatusRoundTripsByteForByte) {
   const auto bytes = fixture("camera_status_v2.hex");
   const auto decoded = face_tracking::codec::decode_camera_status(bytes);
