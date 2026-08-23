@@ -53,6 +53,8 @@ struct PixelCenterControllerSettings {
   float kp_tilt_deg_per_px{};
   float max_pan_step_deg{};
   float max_tilt_step_deg{};
+  bool reverse_pan_output{};
+  bool reverse_tilt_output{};
   int observation_timeout_ms{};
 };
 

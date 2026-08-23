@@ -34,6 +34,8 @@ controller:
   kp_tilt_deg_per_px: 0.01
   max_pan_step_deg: 1.5
   max_tilt_step_deg: 1.0
+  reverse_pan_output: true
+  reverse_tilt_output: true
   observation_timeout_ms: 600
 
 servo:

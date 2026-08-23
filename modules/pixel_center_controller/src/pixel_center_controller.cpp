@@ -122,16 +122,20 @@ std::optional<PanTiltDelta> PixelCenterController::process(
 
   const float error_x = observation.target_center_x - observation.image_width / 2.0F;
   const float error_y = observation.target_center_y - observation.image_height / 2.0F;
+  const float pan_direction = state.settings.reverse_pan_output ? -1.0F : 1.0F;
+  const float tilt_direction = state.settings.reverse_tilt_output ? -1.0F : 1.0F;
   const float pan = std::abs(error_x) <= state.settings.deadband_x_px
                         ? 0.0F
-                        : std::clamp(state.settings.kp_pan_deg_per_px * error_x,
-                                     -state.settings.max_pan_step_deg,
-                                     state.settings.max_pan_step_deg);
+                        : pan_direction *
+                              std::clamp(state.settings.kp_pan_deg_per_px * error_x,
+                                         -state.settings.max_pan_step_deg,
+                                         state.settings.max_pan_step_deg);
   const float tilt = std::abs(error_y) <= state.settings.deadband_y_px
                          ? 0.0F
-                         : std::clamp(state.settings.kp_tilt_deg_per_px * error_y,
-                                      -state.settings.max_tilt_step_deg,
-                                      state.settings.max_tilt_step_deg);
+                         : tilt_direction *
+                               std::clamp(state.settings.kp_tilt_deg_per_px * error_y,
+                                          -state.settings.max_tilt_step_deg,
+                                          state.settings.max_tilt_step_deg);
   ++state.status.processed_observations;
   state.status.state = PixelCenterControllerState::active;
   state.status.error_x_px = error_x;

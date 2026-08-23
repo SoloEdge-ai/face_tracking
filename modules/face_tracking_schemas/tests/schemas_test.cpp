@@ -243,11 +243,13 @@ TEST(Settings, ControllerLoadsTypedSettingsAndKeys) {
     std::ofstream output(path);
     output << "common: {device_id: pi}\n"
               "middleware: {adapter: zenoh, connect: tcp/127.0.0.1:7447, key_prefix: face_tracking}\n"
-              "controller: {control_rate_hz: 20, deadband_x_px: 30, deadband_y_px: 24, kp_pan_deg_per_px: 0.01, kp_tilt_deg_per_px: 0.01, max_pan_step_deg: 1.5, max_tilt_step_deg: 1.0, observation_timeout_ms: 200}\n";
+              "controller: {control_rate_hz: 20, deadband_x_px: 30, deadband_y_px: 24, kp_pan_deg_per_px: 0.01, kp_tilt_deg_per_px: 0.01, max_pan_step_deg: 1.5, max_tilt_step_deg: 1.0, reverse_pan_output: true, reverse_tilt_output: true, observation_timeout_ms: 200}\n";
   }
   const auto settings = face_tracking::load_controller_process_settings(path);
   std::filesystem::remove(path);
   EXPECT_EQ(settings.controller.control_rate_hz, 20);
+  EXPECT_TRUE(settings.controller.reverse_pan_output);
+  EXPECT_TRUE(settings.controller.reverse_tilt_output);
   EXPECT_EQ(settings.transport.selected_target_key(), "face_tracking/pi/target/selected");
   EXPECT_EQ(settings.transport.pan_tilt_delta_key(), "face_tracking/pi/pan_tilt/delta_cmd");
 }

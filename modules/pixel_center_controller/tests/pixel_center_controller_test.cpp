@@ -12,6 +12,8 @@ face_tracking::PixelCenterControllerSettings settings() {
       .kp_tilt_deg_per_px = 0.01F,
       .max_pan_step_deg = 1.5F,
       .max_tilt_step_deg = 1.0F,
+      .reverse_pan_output = false,
+      .reverse_tilt_output = false,
       .observation_timeout_ms = 200,
   };
 }
@@ -32,6 +34,17 @@ face_tracking::SelectedTargetObservation observation(
   };
 }
 }  // namespace
+
+TEST(PixelCenterController, ReversesBothConfiguredTrackingOutputsWithoutMovingHome) {
+  auto reversed = settings();
+  reversed.reverse_pan_output = true;
+  reversed.reverse_tilt_output = true;
+  face_tracking::controller::PixelCenterController controller(reversed);
+  const auto command = controller.process(observation(740, 300), 1'100'000'000);
+  ASSERT_TRUE(command);
+  EXPECT_FLOAT_EQ(command->delta_pan_deg, -1.0F);
+  EXPECT_FLOAT_EQ(command->delta_tilt_deg, 0.6F);
+}
 
 TEST(PixelCenterController, AppliesDirectionDeadbandAndStepLimits) {
   face_tracking::controller::PixelCenterController controller(settings());

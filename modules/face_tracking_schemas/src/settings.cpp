@@ -96,6 +96,8 @@ ControllerProcessSettings load_controller_process_settings(const std::filesystem
           .kp_tilt_deg_per_px = required<float>(controller, "kp_tilt_deg_per_px"),
           .max_pan_step_deg = required<float>(controller, "max_pan_step_deg"),
           .max_tilt_step_deg = required<float>(controller, "max_tilt_step_deg"),
+          .reverse_pan_output = required<bool>(controller, "reverse_pan_output"),
+          .reverse_tilt_output = required<bool>(controller, "reverse_tilt_output"),
           .observation_timeout_ms = required<int>(controller, "observation_timeout_ms"),
       },
   };
