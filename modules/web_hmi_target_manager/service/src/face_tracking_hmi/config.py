@@ -17,7 +17,7 @@ class Settings:
     port: int
     stale_after_ms: int
     offline_after_ms: int
-    target_missing_frame_threshold: int = 5
+    target_missing_frame_threshold: int = 10
     target_reacquire_timeout_ms: int = 1000
     selection_max_age_ms: int = 1000
 
@@ -35,7 +35,7 @@ def load_settings(path: str | Path | None = None) -> Settings:
         adapter=middleware["adapter"], connect=middleware["connect"],
         key_prefix=middleware["key_prefix"], host=hmi["host"], port=hmi["port"],
         stale_after_ms=hmi["stale_after_ms"], offline_after_ms=hmi["offline_after_ms"],
-        target_missing_frame_threshold=target.get("missing_frame_threshold", 5),
+        target_missing_frame_threshold=target.get("missing_frame_threshold", 10),
         target_reacquire_timeout_ms=target.get("reacquire_timeout_ms", 1000),
         selection_max_age_ms=target.get("selection_max_age_ms", 1000),
     )

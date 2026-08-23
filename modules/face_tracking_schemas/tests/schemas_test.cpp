@@ -133,7 +133,7 @@ TEST(Schemas, TargetObservationAndControllerOutputRoundTrip) {
       face_tracking::ControllerDecision::out_of_order);
 }
 
-TEST(Schemas, MissingTargetAndServoCommandedStateRoundTrip) {
+TEST(Schemas, MissingTargetAndServoHeldStaleStateRoundTrip) {
   face_tracking::SelectedTargetObservation missing{
       .source_instance_id = "camera-a",
       .tracker_instance_id = "tracker-a",
@@ -155,7 +155,7 @@ TEST(Schemas, MissingTargetAndServoCommandedStateRoundTrip) {
       .commanded_tilt_deg = 20.0F,
       .last_track_id = 42,
       .state = face_tracking::ServoDriverState::holding,
-      .decision = face_tracking::ServoDecision::held_missing,
+      .decision = face_tracking::ServoDecision::held_stale,
       .pan_limit_held = false,
       .tilt_limit_held = true,
       .pwm_active = true,
@@ -166,7 +166,7 @@ TEST(Schemas, MissingTargetAndServoCommandedStateRoundTrip) {
       face_tracking::codec::encode(state));
   EXPECT_FLOAT_EQ(decoded.commanded_pan_deg, 135.0F);
   EXPECT_FLOAT_EQ(decoded.commanded_tilt_deg, 20.0F);
-  EXPECT_EQ(decoded.decision, face_tracking::ServoDecision::held_missing);
+  EXPECT_EQ(decoded.decision, face_tracking::ServoDecision::held_stale);
   EXPECT_TRUE(decoded.tilt_limit_held);
   EXPECT_TRUE(decoded.pwm_active);
 }
@@ -260,7 +260,7 @@ TEST(Settings, ServoLoadsIndependentAxisLimitsAndKeys) {
     std::ofstream output(path);
     output << "common: {device_id: pi}\n"
               "middleware: {adapter: zenoh, connect: tcp/127.0.0.1:7447, key_prefix: face_tracking}\n"
-              "servo: {pwm_chip: 0, frequency_hz: 50, upstream_timeout_ms: 1500, max_input_pan_delta_deg: 1.5, max_input_tilt_delta_deg: 1.0, tracking_enabled: true, "
+              "servo: {pwm_chip: 0, frequency_hz: 50, upstream_timeout_ms: 5000, max_input_pan_delta_deg: 1.5, max_input_tilt_delta_deg: 1.0, tracking_enabled: true, "
               "pan: {gpio: 18, rated_max_deg: 270, min_deg: 100, max_deg: 170, home_deg: 135, min_pulse_us: 500, max_pulse_us: 2500, invert: false}, "
               "tilt: {gpio: 19, rated_max_deg: 180, min_deg: 15, max_deg: 45, home_deg: 20, min_pulse_us: 500, max_pulse_us: 2500, invert: false}}\n";
   }
@@ -270,6 +270,7 @@ TEST(Settings, ServoLoadsIndependentAxisLimitsAndKeys) {
   EXPECT_EQ(settings.servo.tilt.gpio, 19);
   EXPECT_FLOAT_EQ(settings.servo.pan.min_deg, 100.0F);
   EXPECT_FLOAT_EQ(settings.servo.pan.max_deg, 170.0F);
+  EXPECT_EQ(settings.servo.upstream_timeout_ms, 5000);
   EXPECT_FLOAT_EQ(settings.servo.max_input_pan_delta_deg, 1.5F);
   EXPECT_FLOAT_EQ(settings.servo.max_input_tilt_delta_deg, 1.0F);
   EXPECT_FLOAT_EQ(settings.servo.tilt.home_deg, 20.0F);

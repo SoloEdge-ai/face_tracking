@@ -74,7 +74,7 @@ face_tracking::ServoDriverSettings settings() {
   return {
       .pwm_chip = 0,
       .frequency_hz = 50,
-      .upstream_timeout_ms = 1500,
+      .upstream_timeout_ms = 5000,
       .max_input_pan_delta_deg = 1.5,
       .max_input_tilt_delta_deg = 1.0,
       .tracking_enabled = true,
@@ -201,18 +201,23 @@ TEST(ServoDriver, MissingHoldsAndLostReturnsHome) {
   EXPECT_EQ(home.decision, face_tracking::ServoDecision::home_lost);
 }
 
-TEST(ServoDriver, StaleForTheLastSeenSequenceStillReturnsHome) {
+TEST(ServoDriver, StaleHoldsWithoutRefreshingTheFreshControlTimeout) {
   FakePwm pwm;
   face_tracking::servo::ServoDriver driver(settings(), pwm);
   driver.start(1'100'000'000);
   driver.process(command(1, 1, face_tracking::ControllerDecision::applied), 1'100'000'001);
   driver.process(
       command(0, 0, face_tracking::ControllerDecision::missing_hold, 2), 1'100'000'002);
-  const auto& home = driver.process(
-      command(0, 0, face_tracking::ControllerDecision::stale, 2), 1'100'000'003);
-  EXPECT_FLOAT_EQ(home.commanded_pan_deg, 135);
-  EXPECT_FLOAT_EQ(home.commanded_tilt_deg, 20);
-  EXPECT_EQ(home.decision, face_tracking::ServoDecision::home_stale);
+  const auto& held = driver.process(
+      command(0, 0, face_tracking::ControllerDecision::stale, 2), 2'000'000'000);
+  EXPECT_FLOAT_EQ(held.commanded_pan_deg, 136);
+  EXPECT_FLOAT_EQ(held.commanded_tilt_deg, 21);
+  EXPECT_EQ(held.decision, face_tracking::ServoDecision::held_stale);
+  EXPECT_FALSE(driver.check_timeout(6'100'000'001));
+  EXPECT_TRUE(driver.check_timeout(6'100'000'002));
+  EXPECT_FLOAT_EQ(driver.state().commanded_pan_deg, 135);
+  EXPECT_FLOAT_EQ(driver.state().commanded_tilt_deg, 20);
+  EXPECT_EQ(driver.state().decision, face_tracking::ServoDecision::home_upstream_timeout);
 }
 
 TEST(ServoDriver, ReturnsHomeAfterUpstreamTimeout) {
@@ -220,8 +225,8 @@ TEST(ServoDriver, ReturnsHomeAfterUpstreamTimeout) {
   face_tracking::servo::ServoDriver driver(settings(), pwm);
   driver.start(1'000'000'000);
   driver.process(command(1, 1, face_tracking::ControllerDecision::applied), 1'100'000'000);
-  EXPECT_FALSE(driver.check_timeout(2'599'999'999));
-  EXPECT_TRUE(driver.check_timeout(2'600'000'000));
+  EXPECT_FALSE(driver.check_timeout(6'099'999'999));
+  EXPECT_TRUE(driver.check_timeout(6'100'000'000));
   EXPECT_FLOAT_EQ(driver.state().commanded_pan_deg, 135);
   EXPECT_EQ(driver.state().decision, face_tracking::ServoDecision::home_upstream_timeout);
 }
@@ -259,7 +264,8 @@ TEST(ServoDriver, RejectedDeltasDoNotPostponeUpstreamTimeout) {
       command(100, 0, face_tracking::ControllerDecision::applied), 1'500'000'000);
   driver.process(
       command(100, 0, face_tracking::ControllerDecision::applied, 2), 2'400'000'000);
-  EXPECT_TRUE(driver.check_timeout(2'500'000'000));
+  EXPECT_FALSE(driver.check_timeout(5'999'999'999));
+  EXPECT_TRUE(driver.check_timeout(6'000'000'000));
   EXPECT_EQ(driver.state().decision, face_tracking::ServoDecision::home_upstream_timeout);
 }
 

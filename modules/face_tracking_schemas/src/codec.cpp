@@ -164,6 +164,7 @@ wire::ServoDecision to_wire(ServoDecision value) {
     case ServoDecision::applied: return wire::SERVO_DECISION_APPLIED;
     case ServoDecision::held_deadband: return wire::SERVO_DECISION_HELD_DEADBAND;
     case ServoDecision::held_missing: return wire::SERVO_DECISION_HELD_MISSING;
+    case ServoDecision::held_stale: return wire::SERVO_DECISION_HELD_STALE;
     case ServoDecision::held_limit: return wire::SERVO_DECISION_HELD_LIMIT;
     case ServoDecision::home_lost: return wire::SERVO_DECISION_HOME_LOST;
     case ServoDecision::home_no_target: return wire::SERVO_DECISION_HOME_NO_TARGET;
@@ -183,6 +184,7 @@ ServoDecision from_wire(wire::ServoDecision value) {
     case wire::SERVO_DECISION_APPLIED: return ServoDecision::applied;
     case wire::SERVO_DECISION_HELD_DEADBAND: return ServoDecision::held_deadband;
     case wire::SERVO_DECISION_HELD_MISSING: return ServoDecision::held_missing;
+    case wire::SERVO_DECISION_HELD_STALE: return ServoDecision::held_stale;
     case wire::SERVO_DECISION_HELD_LIMIT: return ServoDecision::held_limit;
     case wire::SERVO_DECISION_HOME_LOST: return ServoDecision::home_lost;
     case wire::SERVO_DECISION_HOME_NO_TARGET: return ServoDecision::home_no_target;

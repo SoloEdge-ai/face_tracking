@@ -209,6 +209,7 @@ def decode_servo_commanded_state(payload: bytes) -> dict[str, object]:
             wire.SERVO_DECISION_APPLIED: "APPLIED",
             wire.SERVO_DECISION_HELD_DEADBAND: "HELD_DEADBAND",
             wire.SERVO_DECISION_HELD_MISSING: "HELD_MISSING",
+            wire.SERVO_DECISION_HELD_STALE: "HELD_STALE",
             wire.SERVO_DECISION_HELD_LIMIT: "HELD_LIMIT",
             wire.SERVO_DECISION_HOME_LOST: "HOME_LOST",
             wire.SERVO_DECISION_HOME_NO_TARGET: "HOME_NO_TARGET",

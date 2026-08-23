@@ -11,7 +11,7 @@
 
 namespace face_tracking::servo {
 
-enum class UpstreamEvent { activity, online, offline };
+enum class UpstreamEvent { online, offline };
 
 class ServoPwmPort {
  public:
@@ -30,7 +30,7 @@ class ServoDriver {
 
   const PanTiltCommandedState& start(std::int64_t now_unix_ns);
   const PanTiltCommandedState& process(const PanTiltDelta& command, std::int64_t now_unix_ns);
-  void note_upstream_activity(std::int64_t now_unix_ns);
+  void note_upstream_online(std::int64_t now_unix_ns);
   const PanTiltCommandedState& upstream_lost(std::int64_t now_unix_ns);
   bool check_timeout(std::int64_t now_unix_ns);
   const PanTiltCommandedState& stop(std::int64_t now_unix_ns) noexcept;

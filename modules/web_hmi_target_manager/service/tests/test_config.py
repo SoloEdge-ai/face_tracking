@@ -13,4 +13,6 @@ hmi: {host: 127.0.0.1, port: 8080, stale_after_ms: 500, offline_after_ms: 3000}
 """,
         encoding="utf-8",
     )
-    assert load_settings(config).adapter == "ros2"
+    settings = load_settings(config)
+    assert settings.adapter == "ros2"
+    assert settings.target_missing_frame_threshold == 10

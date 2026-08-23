@@ -49,6 +49,14 @@ struct ServoDriver::Implementation {
     state.last_error.reset();
   }
 
+  void hold(ServoDecision decision, std::int64_t now) {
+    state.state = ServoDriverState::holding;
+    state.decision = decision;
+    state.pan_limit_held = false;
+    state.tilt_limit_held = false;
+    update_time(now);
+  }
+
   void home(ServoDecision decision, std::int64_t now) {
     write_axis(settings.pan, settings.pan.home_deg);
     write_axis(settings.tilt, settings.tilt.home_deg);
@@ -94,7 +102,7 @@ const PanTiltCommandedState& ServoDriver::process(const PanTiltDelta& command, s
   if (command_age_ns < -50'000'000LL ||
       command_age_ns > static_cast<std::int64_t>(driver.settings.upstream_timeout_ms) * 1'000'000LL) {
     ++driver.state.rejected_commands;
-    driver.home(ServoDecision::home_stale, now);
+    driver.hold(ServoDecision::held_stale, now);
     return driver.state;
   }
   if (command.reason == ControllerDecision::lost) {
@@ -108,8 +116,7 @@ const PanTiltCommandedState& ServoDriver::process(const PanTiltDelta& command, s
     return driver.state;
   }
   if (command.reason == ControllerDecision::stale) {
-    driver.last_upstream_at_unix_ns = now;
-    driver.home(ServoDecision::home_stale, now);
+    driver.hold(ServoDecision::held_stale, now);
     return driver.state;
   }
   if (std::abs(command.delta_pan_deg) > driver.settings.max_input_pan_delta_deg ||
@@ -120,7 +127,6 @@ const PanTiltCommandedState& ServoDriver::process(const PanTiltDelta& command, s
     driver.update_time(now);
     return driver.state;
   }
-  driver.last_upstream_at_unix_ns = now;
   if (command.selected_track_id != 0) driver.state.last_track_id = command.selected_track_id;
 
   if (!command.source_instance_id.empty() && !command.tracker_instance_id.empty()) {
@@ -148,6 +154,7 @@ const PanTiltCommandedState& ServoDriver::process(const PanTiltDelta& command, s
 
   switch (command.reason) {
     case ControllerDecision::applied: {
+      driver.last_upstream_at_unix_ns = now;
       if (!driver.settings.tracking_enabled) {
         ++driver.state.rejected_commands;
         driver.state.decision = ServoDecision::rejected_invalid;
@@ -184,17 +191,19 @@ const PanTiltCommandedState& ServoDriver::process(const PanTiltDelta& command, s
       return driver.state;
     }
     case ControllerDecision::deadband:
+      driver.last_upstream_at_unix_ns = now;
       driver.state.decision = ServoDecision::held_deadband;
       driver.state.state = ServoDriverState::holding;
       break;
     case ControllerDecision::missing_hold:
+      driver.last_upstream_at_unix_ns = now;
       driver.state.decision = ServoDecision::held_missing;
       driver.state.state = ServoDriverState::holding;
       break;
     case ControllerDecision::lost:
     case ControllerDecision::no_target:
     case ControllerDecision::stale:
-      throw std::logic_error("home decisions must be handled before ordering checks");
+      throw std::logic_error("pre-ordering decisions must be handled before ordering checks");
     case ControllerDecision::duplicate:
       ++driver.state.rejected_commands;
       driver.state.decision = ServoDecision::rejected_duplicate;
@@ -212,7 +221,7 @@ const PanTiltCommandedState& ServoDriver::process(const PanTiltDelta& command, s
   return driver.state;
 }
 
-void ServoDriver::note_upstream_activity(std::int64_t now) {
+void ServoDriver::note_upstream_online(std::int64_t now) {
   implementation_->last_upstream_at_unix_ns = now;
 }
 
@@ -298,12 +307,10 @@ void ServoDriverService::run(std::stop_token stop_token) {
         if (const auto* upstream = std::get_if<UpstreamEvent>(&event)) {
           if (*upstream == UpstreamEvent::online) {
             service.upstream_online = true;
-            service.driver.note_upstream_activity(now);
+            service.driver.note_upstream_online(now);
           } else if (*upstream == UpstreamEvent::offline) {
             service.upstream_online = false;
             service.transport.publish_state(service.driver.upstream_lost(now));
-          } else if (service.upstream_online) {
-            service.driver.note_upstream_activity(now);
           }
           continue;
         }

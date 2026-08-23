@@ -173,11 +173,11 @@ def test_servo_commanded_state_protobuf_decodes() -> None:
         commanded_tilt_deg=10,
         last_track_id=7,
         state=wire.SERVO_DRIVER_STATE_HOLDING,
-        decision=wire.SERVO_DECISION_HOME_LOST,
+        decision=wire.SERVO_DECISION_HELD_STALE,
         pwm_active=True,
     ).SerializeToString()
     decoded = decode_servo_commanded_state(payload)
     assert decoded["commanded_pan_deg"] == 135
     assert decoded["commanded_tilt_deg"] == 10
     assert decoded["state"] == "HOLDING"
-    assert decoded["decision"] == "HOME_LOST"
+    assert decoded["decision"] == "HELD_STALE"

@@ -49,7 +49,7 @@ def create_app(
     target_manager: TargetManager | None = None,
 ) -> FastAPI:
     target_manager = target_manager or TargetManager(
-        missing_frame_threshold=5, reacquire_timeout_ms=1000, selection_max_age_ms=1000
+        missing_frame_threshold=10, reacquire_timeout_ms=1000, selection_max_age_ms=1000
     )
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:

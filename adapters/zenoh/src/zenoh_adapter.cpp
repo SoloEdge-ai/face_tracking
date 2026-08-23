@@ -207,7 +207,6 @@ struct ServoTransport::Implementation {
   zenoh::Publisher commanded_state;
   zenoh::LivelinessToken liveliness;
   std::optional<zenoh::Subscriber<void>> delta_subscriber;
-  std::optional<zenoh::Subscriber<void>> status_subscriber;
   std::optional<zenoh::Subscriber<void>> controller_liveliness_subscriber;
   std::optional<zenoh::Queryable<void>> state_queryable;
   std::mutex handler_mutex;
@@ -238,17 +237,6 @@ void ServoTransport::start(CommandHandler command_handler, UpstreamHandler upstr
           }
         } catch (const std::exception&) {
           // Invalid commands do not refresh upstream activity.
-        }
-      },
-      zenoh::closures::none));
-  implementation_->status_subscriber.emplace(implementation_->session.declare_subscriber(
-      zenoh::KeyExpr(implementation_->settings.controller_status_key()),
-      [this](const zenoh::Sample& sample) {
-        try {
-          (void)codec::decode_pixel_center_controller_status(sample.get_payload().as_vector());
-          implementation_->upstream(servo::UpstreamEvent::activity);
-        } catch (const std::exception&) {
-          // Invalid status does not refresh upstream activity.
         }
       },
       zenoh::closures::none));
@@ -285,7 +273,6 @@ void ServoTransport::start(CommandHandler command_handler, UpstreamHandler upstr
 void ServoTransport::stop() {
   implementation_->state_queryable.reset();
   implementation_->controller_liveliness_subscriber.reset();
-  implementation_->status_subscriber.reset();
   implementation_->delta_subscriber.reset();
   std::lock_guard lock(implementation_->handler_mutex);
   implementation_->command_handler = {};

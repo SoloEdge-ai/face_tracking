@@ -133,6 +133,7 @@ enum class ServoDecision {
   applied,
   held_deadband,
   held_missing,
+  held_stale,
   held_limit,
   home_lost,
   home_no_target,
