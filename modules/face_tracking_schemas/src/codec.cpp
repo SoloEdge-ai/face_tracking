@@ -70,7 +70,6 @@ std::vector<std::uint8_t> encode(const FrameMetadata& value) {
   wire::FrameMetadata message;
   message.set_schema_version(value.schema_version);
   message.set_source_instance_id(value.source_instance_id);
-  message.set_tracker_instance_id(value.tracker_instance_id);
   message.set_sequence(value.sequence);
   message.set_captured_at_unix_ns(value.captured_at_unix_ns);
   message.set_width(value.width);
@@ -92,6 +91,7 @@ std::vector<std::uint8_t> encode(const DetectionResult& value) {
   wire::DetectionResult message;
   message.set_schema_version(value.schema_version);
   message.set_source_instance_id(value.source_instance_id);
+  message.set_tracker_instance_id(value.tracker_instance_id);
   message.set_sequence(value.sequence);
   message.set_captured_at_unix_ns(value.captured_at_unix_ns);
   message.set_image_width(value.image_width);
