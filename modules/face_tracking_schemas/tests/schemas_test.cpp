@@ -170,7 +170,7 @@ TEST(Settings, DetectorProcessLoadsOnlyItsOwnTypedSection) {
     std::ofstream output(path);
     output << "common: {device_id: pi}\n"
               "middleware: {adapter: zenoh, connect: tcp/127.0.0.1:7447, key_prefix: face_tracking}\n"
-              "detector: {model_path: model.onnx, inference_hz: 5, image_size: 640, confidence: 0.5, iou: 0.45}\n";
+              "detector: {model_path: model.onnx, inference_hz: 5, image_size: 640, confidence: 0.5, iou: 0.45, tracker: {retention_ms: 1000, min_match_iou: 0.1, max_center_distance_ratio: 1.0}}\n";
   }
   const auto settings = face_tracking::load_detector_process_settings(path);
   std::filesystem::remove(path);

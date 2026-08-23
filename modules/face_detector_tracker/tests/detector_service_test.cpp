@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <opencv2/imgcodecs.hpp>
 #include "face_tracking/detector/detector_service.hpp"
+#include "face_tracking/detector/face_tracker.hpp"
 #include "detector_internal.hpp"
 
 namespace {
@@ -123,4 +124,34 @@ TEST(OpenCvYolo, LetterboxAndPostprocessRestoreOriginalPixelsAndApplyNms) {
   EXPECT_FLOAT_EQ(boxes[1].y, 70);
   EXPECT_FLOAT_EQ(boxes[1].width, 100);
   EXPECT_FLOAT_EQ(boxes[1].height, 100);
+}
+
+TEST(FaceTracker, KeepsIdentityAcrossMotionAndShortOcclusion) {
+  face_tracking::detector::FaceTracker tracker(
+      {.retention_ms = 1000, .min_match_iou = 0.1F, .max_center_distance_ratio = 1.0F},
+      "tracker-test");
+  const auto first = tracker.update({{10, 20, 100, 100, 0.9F}}, 1'000'000'000);
+  ASSERT_EQ(first.size(), 1U);
+  EXPECT_NE(first.front().track_id, 0U);
+
+  const auto moved = tracker.update({{70, 20, 100, 100, 0.9F}}, 1'200'000'000);
+  ASSERT_EQ(moved.size(), 1U);
+  EXPECT_EQ(moved.front().track_id, first.front().track_id);
+
+  EXPECT_TRUE(tracker.update({}, 1'400'000'000).empty());
+  const auto reacquired = tracker.update({{130, 20, 100, 100, 0.9F}}, 1'600'000'000);
+  ASSERT_EQ(reacquired.size(), 1U);
+  EXPECT_EQ(reacquired.front().track_id, first.front().track_id);
+  EXPECT_EQ(tracker.instance_id(), "tracker-test");
+}
+
+TEST(FaceTracker, NeverReusesExpiredTrackIds) {
+  face_tracking::detector::FaceTracker tracker(
+      {.retention_ms = 1000, .min_match_iou = 0.1F, .max_center_distance_ratio = 1.0F},
+      "tracker-test");
+  const auto first = tracker.update({{10, 20, 100, 100, 0.9F}}, 1'000'000'000);
+  EXPECT_TRUE(tracker.update({}, 2'100'000'000).empty());
+  const auto replacement = tracker.update({{10, 20, 100, 100, 0.9F}}, 2'200'000'000);
+  ASSERT_EQ(replacement.size(), 1U);
+  EXPECT_GT(replacement.front().track_id, first.front().track_id);
 }
