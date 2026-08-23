@@ -68,6 +68,25 @@ TEST(Schemas, PythonGoldenDetectionDecodes) {
   EXPECT_FLOAT_EQ(decoded.boxes.front().confidence, 0.75F);
 }
 
+TEST(Schemas, TrackedDetectionRoundTripsWithProcessIdentity) {
+  face_tracking::DetectionResult value{
+      .source_instance_id = "camera-a",
+      .tracker_instance_id = "tracker-a",
+      .sequence = 8,
+      .captured_at_unix_ns = 123457,
+      .image_width = 1280,
+      .image_height = 720,
+      .inference_ms = 11.0,
+      .boxes = {{.x = 10, .y = 20, .width = 30, .height = 40, .confidence = 0.9F, .track_id = 42}},
+  };
+
+  const auto decoded = face_tracking::codec::decode_detection_result(face_tracking::codec::encode(value));
+
+  EXPECT_EQ(decoded.tracker_instance_id, "tracker-a");
+  ASSERT_EQ(decoded.boxes.size(), 1U);
+  EXPECT_EQ(decoded.boxes.front().track_id, 42U);
+}
+
 TEST(Schemas, PythonGoldenCameraStatusRoundTripsByteForByte) {
   const auto bytes = fixture("camera_status_v2.hex");
   const auto decoded = face_tracking::codec::decode_camera_status(bytes);
