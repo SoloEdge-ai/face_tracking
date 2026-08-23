@@ -8,6 +8,7 @@ Raspberry Pi 5 face-detection pipeline with modular C++ camera and detector proc
 - `modules/camera_service`: UVC capture, latest-frame buffering, JPEG encoding and rate limiting.
 - `modules/face_detector_tracker`: OpenCV DNN inference, latest-only scheduling, YOLO post-processing and stable short-term face tracks.
 - `modules/pixel_center_controller`: middleware-neutral target validation and bounded pixel-centering P control.
+- `modules/servo_driver`: middleware-neutral command validation, commanded-angle state machine, soft limits, and the Raspberry Pi lgpio PWM backend.
 - `adapters/zenoh`: Zenoh publishers/subscriber and the C++ process entrypoints.
 - `modules/web_hmi_target_manager`: FastAPI HMI service, transport adapter, and React application.
 - `modules/pan_tilt_bringup`: safe `zenohd` handover and child-process lifecycle.
@@ -25,7 +26,7 @@ chmod +x setup.sh run.sh
 
 Open `http://192.168.50.2:8080`. Set `FACE_TRACKING_CONFIG` to select another YAML profile or `FACE_TRACKING_DEVICE_ID` to override the configured device identifier.
 
-The HMI draws every currently observed face on the live video and lists the same tracks in the side panel. Select a face by clicking its box or list row; use **Cancel tracking** to return to `NO_TARGET`. `LOST` means the selected track is temporarily absent and may be reacquired within the configured grace period. An empty list is normal when nobody is in view.
+The HMI draws every currently observed face on the live video and lists the same tracks in the side panel. Select a face by clicking its box or list row; use **Cancel tracking** to return to `NO_TARGET`. The first four consecutive frames without the selected `track_id` enter `MISSING` and hold the current angles. The fifth enters `LOST` and returns to Home; the same track can be reacquired for one second. An empty list is normal when nobody is in view. The displayed Pan/Tilt angles are software-commanded values because the servos have no position feedback.
 
 `run.sh` does not enable Zenoh on boot. Bringup reuses `zenohd.service`, or interrupts a manual `/usr/bin/zenohd` only when it is owned by the current user. It never stops an unrelated listener and leaves the system router active after application exit.
 
@@ -40,9 +41,12 @@ Keys remain under `face_tracking/{device_id}`:
 - `target/selected`: Protobuf v2 `SelectedTargetObservation` from the HMI target manager.
 - `pan_tilt/delta_cmd`: Protobuf v2 `PanTiltDelta` from the pixel-center controller.
 - `diagnostics/pixel_center_controller`: Protobuf v2 `PixelCenterControllerStatus`.
-- `liveliness/camera`, `liveliness/detector`, and `liveliness/pixel_center_controller`: process liveliness tokens.
+- `pan_tilt/commanded_state`: Protobuf v2 `PanTiltCommandedState`, also available through a Zenoh queryable.
+- `liveliness/camera`, `liveliness/detector`, `liveliness/pixel_center_controller`, and `liveliness/servo_driver`: process liveliness tokens.
 
-Every detection includes a tracker-process identity plus a `track_id`; the pair is the stable selection identity. The controller runs at 20 Hz and accepts only fresh `TRACKING` observations. It applies a 30 px horizontal and 24 px vertical deadband, 0.01 degree/px proportional gain, and per-frame limits of 1.5 degrees pan and 1.0 degree tilt. Missing, lost, stale (over the deployed 600 ms freshness limit), duplicate, or out-of-order observations produce a safe zero delta. The controller's timeout remains a typed profile setting; unit tests exercise a stricter 200 ms boundary. This release intentionally stops at the controller command boundary and does not drive GPIO or servos.
+Every detection includes a tracker-process identity plus a `track_id`; the pair is the stable selection identity. The controller runs at 20 Hz and accepts only fresh `TRACKING` observations. It applies a 30 px horizontal and 24 px vertical deadband, 0.01 degree/px proportional gain, and per-frame limits of 1.5 degrees pan and 1.0 degree tilt. MISSING, deadband, duplicate, and out-of-order decisions hold the current commanded angles; LOST, NO_TARGET, stale observations, controller liveliness loss, or 1.5 seconds without valid controller activity return to Home.
+
+The servo driver uses GPIO17 for the 270-degree Pan servo and GPIO27 for the 180-degree Tilt servo. Home is Pan 135 degrees / Tilt 10 degrees. Pan is limited to its rated 0-270 degree range; Tilt has a 5-45 degree logical soft limit. A candidate that crosses a limit leaves that axis unchanged instead of saturating it, while the other axis may still move. Both axes default to a nominal 500-2500 microsecond pulse mapping at 50 Hz. Use an independent servo power supply with a common ground, and verify each axis direction with a small unloaded movement before sustained tracking.
 
 ## Development
 
