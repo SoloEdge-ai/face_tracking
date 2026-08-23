@@ -199,6 +199,18 @@ TEST(ServoDriver, RejectsDeltaBeyondDriverInputLimit) {
   EXPECT_EQ(state.rejected_commands, 1U);
 }
 
+TEST(ServoDriver, LostWithInvalidDeltaStillReturnsHome) {
+  FakePwm pwm;
+  face_tracking::servo::ServoDriver driver(settings(), pwm);
+  driver.start(1'100'000'000);
+  driver.process(command(1, 1, face_tracking::ControllerDecision::applied), 1'100'000'001);
+  const auto& state = driver.process(
+      command(100, 100, face_tracking::ControllerDecision::lost, 2), 1'100'000'002);
+  EXPECT_FLOAT_EQ(state.commanded_pan_deg, 135);
+  EXPECT_FLOAT_EQ(state.commanded_tilt_deg, 20);
+  EXPECT_EQ(state.decision, face_tracking::ServoDecision::home_lost);
+}
+
 TEST(ServoDriverService, LivelinessLossLatchesHomeAndDropsQueuedCommands) {
   FakePwm pwm;
   FakeTransport transport;

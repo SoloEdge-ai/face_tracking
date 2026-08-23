@@ -97,14 +97,6 @@ const PanTiltCommandedState& ServoDriver::process(const PanTiltDelta& command, s
     driver.home(ServoDecision::home_stale, now);
     return driver.state;
   }
-  if (std::abs(command.delta_pan_deg) > driver.settings.max_input_pan_delta_deg ||
-      std::abs(command.delta_tilt_deg) > driver.settings.max_input_tilt_delta_deg) {
-    ++driver.state.rejected_commands;
-    driver.state.decision = ServoDecision::rejected_invalid;
-    driver.state.state = ServoDriverState::holding;
-    driver.update_time(now);
-    return driver.state;
-  }
   driver.last_upstream_at_unix_ns = now;
   if (command.selected_track_id != 0) driver.state.last_track_id = command.selected_track_id;
 
@@ -118,6 +110,14 @@ const PanTiltCommandedState& ServoDriver::process(const PanTiltDelta& command, s
   }
   if (command.reason == ControllerDecision::stale) {
     driver.home(ServoDecision::home_stale, now);
+    return driver.state;
+  }
+  if (std::abs(command.delta_pan_deg) > driver.settings.max_input_pan_delta_deg ||
+      std::abs(command.delta_tilt_deg) > driver.settings.max_input_tilt_delta_deg) {
+    ++driver.state.rejected_commands;
+    driver.state.decision = ServoDecision::rejected_invalid;
+    driver.state.state = ServoDriverState::holding;
+    driver.update_time(now);
     return driver.state;
   }
 
