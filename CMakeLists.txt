@@ -55,6 +55,7 @@ endif()
 add_subdirectory(modules/face_tracking_schemas)
 add_subdirectory(modules/camera_service)
 add_subdirectory(modules/face_detector_tracker)
+add_subdirectory(modules/pixel_center_controller)
 
 if(FACE_TRACKING_BUILD_ZENOH)
   set(ZENOHCXX_ENABLE_TESTS OFF CACHE BOOL "" FORCE)

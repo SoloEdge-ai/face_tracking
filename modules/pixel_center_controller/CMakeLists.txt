@@ -1,0 +1,6 @@
+if(FACE_TRACKING_BUILD_TESTS)
+  add_executable(pixel_center_controller_tests tests/pixel_center_controller_test.cpp)
+  target_link_libraries(pixel_center_controller_tests PRIVATE face_tracking::schemas GTest::gtest_main)
+  include(GoogleTest)
+  gtest_discover_tests(pixel_center_controller_tests)
+endif()
