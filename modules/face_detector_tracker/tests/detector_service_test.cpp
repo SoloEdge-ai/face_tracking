@@ -28,11 +28,11 @@ class FakeEngine final : public face_tracking::detector::internal::InferenceEngi
   bool fail{};
 };
 
-face_tracking::FrameEvent frame(std::uint64_t sequence) {
+face_tracking::FrameEvent frame(std::uint64_t sequence, std::string source_instance_id = "camera") {
   cv::Mat image = cv::Mat::zeros(4, 4, CV_8UC3);
   std::vector<std::uint8_t> jpeg;
   cv::imencode(".jpg", image, jpeg);
-  return {.jpeg = std::move(jpeg), .metadata = {.source_instance_id = "camera", .sequence = sequence, .captured_at_unix_ns = 10, .width = 4, .height = 4, .capture_format = "MJPG", .jpeg_quality = 80}};
+  return {.jpeg = std::move(jpeg), .metadata = {.source_instance_id = std::move(source_instance_id), .sequence = sequence, .captured_at_unix_ns = 10, .width = 4, .height = 4, .capture_format = "MJPG", .jpeg_quality = 80}};
 }
 }
 
@@ -91,6 +91,21 @@ TEST(DetectorService, LoopCanRecoverAfterInferenceException) {
   EXPECT_TRUE(loop.process_if_due(frame(2), start + std::chrono::milliseconds(200)));
   ASSERT_EQ(transport.detections.size(), 1U);
   EXPECT_EQ(transport.detections.front().sequence, 2U);
+}
+
+TEST(DetectorService, CameraRestartStartsANewTrackWithoutReusingIdentity) {
+  FakeTransport transport;
+  FakeEngine engine;
+  engine.boxes = {{0, 0, 3, 3, 0.9F}};
+  face_tracking::detector::internal::DetectorLoop loop(transport, engine, 5);
+  const auto start = std::chrono::steady_clock::time_point{};
+  ASSERT_TRUE(loop.process_if_due(frame(1, "camera-a"), start));
+  ASSERT_TRUE(loop.process_if_due(frame(1, "camera-b"), start + std::chrono::milliseconds(200)));
+  ASSERT_EQ(transport.detections.size(), 2U);
+  ASSERT_EQ(transport.detections[0].boxes.size(), 1U);
+  ASSERT_EQ(transport.detections[1].boxes.size(), 1U);
+  EXPECT_EQ(transport.detections[1].source_instance_id, "camera-b");
+  EXPECT_GT(transport.detections[1].boxes[0].track_id, transport.detections[0].boxes[0].track_id);
 }
 
 TEST(OpenCvYolo, LetterboxAndPostprocessRestoreOriginalPixelsAndApplyNms) {

@@ -17,13 +17,13 @@ face_tracking::PixelCenterControllerSettings settings() {
 }
 
 face_tracking::SelectedTargetObservation observation(
-    float center_x, float center_y, std::uint64_t sequence = 1) {
+    float center_x, float center_y, std::uint64_t sequence = 1, std::uint64_t track_id = 7) {
   return {
       .source_instance_id = "camera-a",
       .tracker_instance_id = "tracker-a",
       .sequence = sequence,
       .captured_at_unix_ns = 1'000'000'000,
-      .selected_track_id = 7,
+      .selected_track_id = track_id,
       .target_center_x = center_x,
       .target_center_y = center_y,
       .image_width = 1280,
@@ -56,8 +56,16 @@ TEST(PixelCenterController, AppliesDirectionDeadbandAndStepLimits) {
 TEST(PixelCenterController, RejectsDuplicateOutOfOrderAndStaleObservations) {
   face_tracking::controller::PixelCenterController controller(settings());
   ASSERT_TRUE(controller.process(observation(700, 360, 2), 1'100'000'000));
-  EXPECT_FALSE(controller.process(observation(700, 360, 2), 1'100'000'001));
-  EXPECT_FALSE(controller.process(observation(700, 360, 1), 1'100'000'002));
+  const auto duplicate = controller.process(observation(700, 360, 2), 1'100'000'001);
+  ASSERT_TRUE(duplicate);
+  EXPECT_EQ(duplicate->reason, face_tracking::ControllerDecision::duplicate);
+  EXPECT_FLOAT_EQ(duplicate->delta_pan_deg, 0.0F);
+  EXPECT_FLOAT_EQ(duplicate->delta_tilt_deg, 0.0F);
+  const auto out_of_order = controller.process(observation(700, 360, 1), 1'100'000'002);
+  ASSERT_TRUE(out_of_order);
+  EXPECT_EQ(out_of_order->reason, face_tracking::ControllerDecision::out_of_order);
+  EXPECT_FLOAT_EQ(out_of_order->delta_pan_deg, 0.0F);
+  EXPECT_FLOAT_EQ(out_of_order->delta_tilt_deg, 0.0F);
 
   const auto stale = controller.check_timeout(1'250'000'000);
   ASSERT_TRUE(stale);
@@ -80,4 +88,16 @@ TEST(PixelCenterController, LostTargetProducesOneZeroHoldCommand) {
   EXPECT_EQ(command->reason, face_tracking::ControllerDecision::lost);
   EXPECT_FLOAT_EQ(command->delta_pan_deg, 0.0F);
   EXPECT_FLOAT_EQ(command->delta_tilt_deg, 0.0F);
+}
+
+TEST(PixelCenterController, AllowsSwitchingTargetsWithinTheSameDetectionFrame) {
+  face_tracking::controller::PixelCenterController controller(settings());
+  const auto first = controller.process(observation(740, 360, 5, 7), 1'100'000'000);
+  ASSERT_TRUE(first);
+  EXPECT_GT(first->delta_pan_deg, 0.0F);
+
+  const auto switched = controller.process(observation(540, 360, 5, 8), 1'100'000'001);
+  ASSERT_TRUE(switched);
+  EXPECT_LT(switched->delta_pan_deg, 0.0F);
+  EXPECT_EQ(switched->selected_track_id, 8U);
 }

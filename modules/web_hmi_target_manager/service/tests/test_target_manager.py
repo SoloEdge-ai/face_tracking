@@ -47,3 +47,15 @@ def test_tracker_restart_clears_selected_target() -> None:
     restarted = DetectionResult("camera-a", "tracker-b", 2, 200_000_000, 1280, 720, 5.0, ())
     cleared = manager.observe_detection(restarted, received_at_unix_ns=1_200_000_000)
     assert cleared is not None and cleared.tracking_state == TrackingState.NO_TARGET
+
+
+def test_camera_restart_clears_selected_target() -> None:
+    manager = TargetManager(lost_after_ms=400, reacquire_timeout_ms=1000, selection_max_age_ms=1000)
+    manager.observe_detection(
+        detection(1, (DetectionBox(1, 2, 30, 40, 0.9, 3),)),
+        received_at_unix_ns=1_000_000_000,
+    )
+    manager.select(TargetSelection("camera-a", "tracker-a", 1, 3), now_unix_ns=1_100_000_000)
+    restarted = DetectionResult("camera-b", "tracker-a", 1, 200_000_000, 1280, 720, 5.0, ())
+    cleared = manager.observe_detection(restarted, received_at_unix_ns=1_200_000_000)
+    assert cleared is not None and cleared.tracking_state == TrackingState.NO_TARGET
