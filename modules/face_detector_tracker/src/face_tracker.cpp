@@ -181,4 +181,9 @@ std::vector<DetectionBox> FaceTracker::update(
 
 const std::string& FaceTracker::instance_id() const { return implementation_->instance_id; }
 
+void FaceTracker::reset() {
+  implementation_->tracks.clear();
+  implementation_->last_update_unix_ns = 0;
+}
+
 }  // namespace face_tracking::detector

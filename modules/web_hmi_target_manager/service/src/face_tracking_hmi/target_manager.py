@@ -52,7 +52,10 @@ class TargetManager:
         with self._lock:
             self._history.append(_DetectionSnapshot(now, result))
             self._prune(now)
-            if self._selected and result.tracker_instance_id != self._selected.tracker_instance_id:
+            if self._selected and (
+                result.source_instance_id != self._selected.source_instance_id
+                or result.tracker_instance_id != self._selected.tracker_instance_id
+            ):
                 return self._clear_locked()
             if not self._selected:
                 return None

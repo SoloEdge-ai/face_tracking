@@ -5,6 +5,7 @@
 #include <cmath>
 #include <mutex>
 #include <thread>
+#include <tuple>
 #include <utility>
 
 namespace face_tracking::controller {
@@ -32,8 +33,9 @@ struct PixelCenterController::Implementation {
       .last_rejection_reason = std::nullopt,
   };
   std::optional<SelectedTargetObservation> last_tracking;
-  std::optional<std::pair<std::string, std::uint64_t>> last_image_key;
-  std::optional<TrackingState> last_input_state;
+  std::optional<std::tuple<std::string, std::string, std::uint64_t, std::uint64_t, TrackingState>>
+      last_observation_key;
+  std::optional<std::tuple<std::string, std::string, std::uint64_t>> last_image_key;
   bool stale_emitted{true};
 };
 
@@ -46,21 +48,25 @@ std::optional<PanTiltDelta> PixelCenterController::process(
     const SelectedTargetObservation& observation, std::int64_t now_unix_ns) {
   auto& state = *implementation_;
   validate(observation);
-  const auto key = std::pair{observation.source_instance_id, observation.sequence};
-  if (state.last_image_key && key.first == state.last_image_key->first) {
-    if (key.second < state.last_image_key->second) {
+  const auto image_key = std::tuple{
+      observation.source_instance_id, observation.tracker_instance_id, observation.sequence};
+  const auto observation_key = std::tuple{
+      observation.source_instance_id, observation.tracker_instance_id, observation.sequence,
+      observation.selected_track_id, observation.tracking_state};
+  if (state.last_image_key && std::get<0>(image_key) == std::get<0>(*state.last_image_key) &&
+      std::get<1>(image_key) == std::get<1>(*state.last_image_key)) {
+    if (std::get<2>(image_key) < std::get<2>(*state.last_image_key)) {
       ++state.status.out_of_order_observations;
       state.status.last_rejection_reason = "OUT_OF_ORDER";
-      return std::nullopt;
+      return zero_command(observation, now_unix_ns, ControllerDecision::out_of_order);
     }
-    if (key == *state.last_image_key && state.last_input_state == observation.tracking_state) {
+    if (state.last_observation_key && observation_key == *state.last_observation_key) {
       ++state.status.duplicate_observations;
       state.status.last_rejection_reason = "DUPLICATE";
-      return std::nullopt;
+      return zero_command(observation, now_unix_ns, ControllerDecision::duplicate);
     }
   }
-  state.last_image_key = key;
-  state.last_input_state = observation.tracking_state;
+  state.last_observation_key = observation_key;
 
   if (observation.tracking_state == TrackingState::no_target) {
     state.last_tracking.reset();
@@ -87,6 +93,13 @@ std::optional<PanTiltDelta> PixelCenterController::process(
     state.status.last_rejection_reason = "STALE";
     return zero_command(observation, now_unix_ns, ControllerDecision::stale);
   }
+
+  if (state.last_image_key && image_key == *state.last_image_key) {
+    ++state.status.duplicate_observations;
+    state.status.last_rejection_reason = "IMAGE_ALREADY_ACTED";
+    return zero_command(observation, now_unix_ns, ControllerDecision::duplicate);
+  }
+  state.last_image_key = image_key;
 
   const float error_x = observation.target_center_x - observation.image_width / 2.0F;
   const float error_y = observation.target_center_y - observation.image_height / 2.0F;

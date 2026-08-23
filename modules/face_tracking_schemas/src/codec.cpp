@@ -89,6 +89,8 @@ wire::ControllerDecision to_wire(ControllerDecision value) {
     case ControllerDecision::no_target: return wire::CONTROLLER_DECISION_NO_TARGET;
     case ControllerDecision::lost: return wire::CONTROLLER_DECISION_LOST;
     case ControllerDecision::stale: return wire::CONTROLLER_DECISION_STALE;
+    case ControllerDecision::duplicate: return wire::CONTROLLER_DECISION_DUPLICATE;
+    case ControllerDecision::out_of_order: return wire::CONTROLLER_DECISION_OUT_OF_ORDER;
   }
   throw std::invalid_argument("invalid controller decision");
 }
@@ -100,6 +102,8 @@ ControllerDecision from_wire(wire::ControllerDecision value) {
     case wire::CONTROLLER_DECISION_NO_TARGET: return ControllerDecision::no_target;
     case wire::CONTROLLER_DECISION_LOST: return ControllerDecision::lost;
     case wire::CONTROLLER_DECISION_STALE: return ControllerDecision::stale;
+    case wire::CONTROLLER_DECISION_DUPLICATE: return ControllerDecision::duplicate;
+    case wire::CONTROLLER_DECISION_OUT_OF_ORDER: return ControllerDecision::out_of_order;
     default: throw std::invalid_argument("invalid controller decision");
   }
 }

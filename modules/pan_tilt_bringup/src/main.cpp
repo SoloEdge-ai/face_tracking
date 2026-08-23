@@ -65,7 +65,10 @@ int main(int argc, char** argv) {
     int child_status = 0;
     while (!interrupted) {
       const pid_t exited = waitpid(-1, &child_status, WNOHANG);
-      if (exited > 0) break;
+      if (exited > 0) {
+        std::erase(children, exited);
+        break;
+      }
       usleep(100'000);
     }
     stop_children(children);

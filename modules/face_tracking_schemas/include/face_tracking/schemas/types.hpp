@@ -73,7 +73,7 @@ struct DetectorStatus {
 };
 
 enum class TrackingState { no_target, tracking, lost };
-enum class ControllerDecision { applied, deadband, no_target, lost, stale };
+enum class ControllerDecision { applied, deadband, no_target, lost, stale, duplicate, out_of_order };
 enum class PixelCenterControllerState { starting, active, holding, error, stopped };
 
 struct SelectedTargetObservation {

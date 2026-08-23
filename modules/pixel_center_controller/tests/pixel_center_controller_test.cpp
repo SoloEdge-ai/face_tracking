@@ -98,6 +98,7 @@ TEST(PixelCenterController, AllowsSwitchingTargetsWithinTheSameDetectionFrame) {
 
   const auto switched = controller.process(observation(540, 360, 5, 8), 1'100'000'001);
   ASSERT_TRUE(switched);
-  EXPECT_LT(switched->delta_pan_deg, 0.0F);
+  EXPECT_FLOAT_EQ(switched->delta_pan_deg, 0.0F);
+  EXPECT_EQ(switched->reason, face_tracking::ControllerDecision::duplicate);
   EXPECT_EQ(switched->selected_track_id, 8U);
 }

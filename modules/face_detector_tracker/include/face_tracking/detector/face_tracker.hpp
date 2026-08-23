@@ -19,6 +19,7 @@ class FaceTracker {
 
   [[nodiscard]] std::vector<DetectionBox> update(
       const std::vector<DetectionBox>& detections, std::int64_t captured_at_unix_ns);
+  void reset();
   [[nodiscard]] const std::string& instance_id() const;
 
  private:

@@ -49,6 +49,10 @@ bool internal::DetectorLoop::process_if_due(const std::optional<FrameEvent>& fra
     last_processed_key_ = key;
     return false;
   }
+  if (active_source_instance_id_ && *active_source_instance_id_ != frame->metadata.source_instance_id) {
+    tracker_.reset();
+  }
+  active_source_instance_id_ = frame->metadata.source_instance_id;
   const auto started = std::chrono::steady_clock::now();
   const auto raw_boxes = engine_.infer(image);
   auto boxes = tracker_.update(raw_boxes, frame->metadata.captured_at_unix_ns);

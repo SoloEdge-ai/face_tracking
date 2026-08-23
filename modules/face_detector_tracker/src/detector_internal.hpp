@@ -48,6 +48,7 @@ class DetectorLoop {
   FaceTracker tracker_;
   std::chrono::steady_clock::time_point next_inference_at_{};
   std::optional<std::pair<std::string, std::uint64_t>> last_processed_key_;
+  std::optional<std::string> active_source_instance_id_;
   std::uint64_t processed_frames_{};
   std::uint64_t decode_errors_{};
 };
