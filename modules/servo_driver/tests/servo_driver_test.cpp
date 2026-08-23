@@ -211,6 +211,18 @@ TEST(ServoDriver, LostWithInvalidDeltaStillReturnsHome) {
   EXPECT_EQ(state.decision, face_tracking::ServoDecision::home_lost);
 }
 
+TEST(ServoDriver, RejectedDeltasDoNotPostponeUpstreamTimeout) {
+  FakePwm pwm;
+  face_tracking::servo::ServoDriver driver(settings(), pwm);
+  driver.start(1'000'000'000);
+  driver.process(
+      command(100, 0, face_tracking::ControllerDecision::applied), 1'500'000'000);
+  driver.process(
+      command(100, 0, face_tracking::ControllerDecision::applied, 2), 2'400'000'000);
+  EXPECT_TRUE(driver.check_timeout(2'500'000'000));
+  EXPECT_EQ(driver.state().decision, face_tracking::ServoDecision::home_upstream_timeout);
+}
+
 TEST(ServoDriverService, LivelinessLossLatchesHomeAndDropsQueuedCommands) {
   FakePwm pwm;
   FakeTransport transport;

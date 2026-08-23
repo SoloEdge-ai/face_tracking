@@ -97,18 +97,18 @@ const PanTiltCommandedState& ServoDriver::process(const PanTiltDelta& command, s
     driver.home(ServoDecision::home_stale, now);
     return driver.state;
   }
-  driver.last_upstream_at_unix_ns = now;
-  if (command.selected_track_id != 0) driver.state.last_track_id = command.selected_track_id;
-
   if (command.reason == ControllerDecision::lost) {
+    driver.last_upstream_at_unix_ns = now;
     driver.home(ServoDecision::home_lost, now);
     return driver.state;
   }
   if (command.reason == ControllerDecision::no_target) {
+    driver.last_upstream_at_unix_ns = now;
     driver.home(ServoDecision::home_no_target, now);
     return driver.state;
   }
   if (command.reason == ControllerDecision::stale) {
+    driver.last_upstream_at_unix_ns = now;
     driver.home(ServoDecision::home_stale, now);
     return driver.state;
   }
@@ -120,6 +120,8 @@ const PanTiltCommandedState& ServoDriver::process(const PanTiltDelta& command, s
     driver.update_time(now);
     return driver.state;
   }
+  driver.last_upstream_at_unix_ns = now;
+  if (command.selected_track_id != 0) driver.state.last_track_id = command.selected_track_id;
 
   if (!command.source_instance_id.empty() && !command.tracker_instance_id.empty()) {
     const auto identity = std::tuple{command.source_instance_id, command.tracker_instance_id,
