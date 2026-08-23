@@ -2,10 +2,11 @@ import sys
 import threading
 from types import SimpleNamespace
 
+from pytest import MonkeyPatch
+
 from face_tracking_hmi.config import Settings
 from face_tracking_hmi.store import LatestFrameStore
 from face_tracking_hmi.zenoh_adapter import ZenohTransport
-from pytest import MonkeyPatch
 
 
 class FakeDeclaration:
