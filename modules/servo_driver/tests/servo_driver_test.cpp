@@ -116,14 +116,14 @@ TEST(ServoDriver, HoldsOnlyTheAxisWhoseCandidateWouldExceedItsLimit) {
   FakePwm pwm;
   face_tracking::servo::ServoDriver driver(settings(), pwm);
   driver.start(1'100'000'000);
-  for (std::uint64_t sequence = 1; sequence <= 24; ++sequence) {
+  for (std::uint64_t sequence = 1; sequence <= 25; ++sequence) {
     driver.process(command(0, 1, face_tracking::ControllerDecision::applied, sequence),
                    1'100'000'000 + static_cast<std::int64_t>(sequence));
   }
   const auto& state = driver.process(
-      command(1, 1, face_tracking::ControllerDecision::applied, 25), 1'100'000'025);
+      command(1, 1, face_tracking::ControllerDecision::applied, 26), 1'100'000'026);
   EXPECT_FLOAT_EQ(state.commanded_pan_deg, 136);
-  EXPECT_FLOAT_EQ(state.commanded_tilt_deg, 44);
+  EXPECT_FLOAT_EQ(state.commanded_tilt_deg, 45);
   EXPECT_FALSE(state.pan_limit_held);
   EXPECT_TRUE(state.tilt_limit_held);
   EXPECT_EQ(state.decision, face_tracking::ServoDecision::held_limit);
