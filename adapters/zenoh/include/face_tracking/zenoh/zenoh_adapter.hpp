@@ -4,6 +4,7 @@
 
 #include "face_tracking/camera/camera_service.hpp"
 #include "face_tracking/detector/detector_service.hpp"
+#include "face_tracking/controller/pixel_center_controller.hpp"
 #include "face_tracking/schemas/settings.hpp"
 
 namespace face_tracking::zenoh_adapter {
@@ -32,6 +33,22 @@ class DetectorTransport final : public detector::TransportPort {
   void stop() override;
   void publish_detection(const DetectionResult& result) override;
   void publish_status(const DetectorStatus& status) override;
+
+ private:
+  struct Implementation;
+  std::unique_ptr<Implementation> implementation_;
+};
+
+class ControllerTransport final : public controller::TransportPort {
+ public:
+  explicit ControllerTransport(const TransportSettings& settings);
+  ~ControllerTransport() override;
+  ControllerTransport(const ControllerTransport&) = delete;
+  ControllerTransport& operator=(const ControllerTransport&) = delete;
+  void start(TargetHandler handler) override;
+  void stop() override;
+  void publish_delta(const PanTiltDelta& command) override;
+  void publish_status(const PixelCenterControllerStatus& status) override;
 
  private:
   struct Implementation;

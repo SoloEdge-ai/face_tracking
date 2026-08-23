@@ -121,4 +121,67 @@ void DetectorTransport::publish_status(const DetectorStatus& status) {
   implementation_->status.put(bytes(codec::encode(status)));
 }
 
+struct ControllerTransport::Implementation {
+  explicit Implementation(const TransportSettings& settings)
+      : settings(settings),
+        session(open_session(settings.middleware)),
+        delta(session.declare_publisher(zenoh::KeyExpr(settings.pan_tilt_delta_key()), [] {
+          zenoh::Session::PublisherOptions options;
+          options.encoding = zenoh::Encoding::Predefined::application_protobuf();
+          return options;
+        }())),
+        status(session.declare_publisher(zenoh::KeyExpr(settings.controller_status_key()), [] {
+          zenoh::Session::PublisherOptions options;
+          options.encoding = zenoh::Encoding::Predefined::application_protobuf();
+          return options;
+        }())),
+        liveliness(session.liveliness_declare_token(zenoh::KeyExpr(settings.controller_liveliness_key()))) {}
+
+  TransportSettings settings;
+  zenoh::Session session;
+  zenoh::Publisher delta;
+  zenoh::Publisher status;
+  zenoh::LivelinessToken liveliness;
+  std::optional<zenoh::Subscriber<void>> subscriber;
+  std::mutex handler_mutex;
+  controller::TransportPort::TargetHandler handler;
+};
+
+ControllerTransport::ControllerTransport(const TransportSettings& settings)
+    : implementation_(std::make_unique<Implementation>(settings)) {}
+ControllerTransport::~ControllerTransport() = default;
+
+void ControllerTransport::start(TargetHandler handler) {
+  {
+    std::lock_guard lock(implementation_->handler_mutex);
+    implementation_->handler = std::move(handler);
+  }
+  implementation_->subscriber.emplace(implementation_->session.declare_subscriber(
+      zenoh::KeyExpr(implementation_->settings.selected_target_key()),
+      [this](const zenoh::Sample& sample) {
+        try {
+          auto observation = codec::decode_selected_target(sample.get_payload().as_vector());
+          std::lock_guard lock(implementation_->handler_mutex);
+          if (implementation_->handler) implementation_->handler(std::move(observation));
+        } catch (const std::exception&) {
+          // Invalid target observations are ignored at the adapter boundary.
+        }
+      },
+      zenoh::closures::none));
+}
+
+void ControllerTransport::stop() {
+  implementation_->subscriber.reset();
+  std::lock_guard lock(implementation_->handler_mutex);
+  implementation_->handler = {};
+}
+
+void ControllerTransport::publish_delta(const PanTiltDelta& command) {
+  implementation_->delta.put(bytes(codec::encode(command)));
+}
+
+void ControllerTransport::publish_status(const PixelCenterControllerStatus& status) {
+  implementation_->status.put(bytes(codec::encode(status)));
+}
+
 }  // namespace face_tracking::zenoh_adapter
