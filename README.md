@@ -74,7 +74,7 @@ The default build pins OpenCV 4.12 because Debian 12's OpenCV 4.6 cannot execute
 
 ## Raspberry Pi 5 validation (2026-08-23)
 
-- Release build: 30/30 CTest cases, 19/19 HMI pytest cases, Ruff, frontend typecheck/build, and `npm audit` all pass.
+- Release build: 32/32 CTest cases, 20/20 HMI pytest cases, Ruff, frontend typecheck/build, and `npm audit` all pass.
 - Camera: 1280x720 capture at 29.9 FPS and JPEG publication at 10.0 FPS, with latest-only replacement and no backlog.
 - Cross-language transport: camera, detector, target, controller, status, attachment, and liveliness channels interoperate across C++ and Python.
 - Tracking/control transport: synthetic target selection verifies C++ controller output (`pan +1.0`, `tilt -0.6`) and automatic zero output after the configured freshness limit. The real empty-camera scene remains stable at zero faces, `NO_TARGET`, and safe zero control output.
