@@ -19,6 +19,7 @@ message DetectionBox {
   float width = 3;
   float height = 4;
   float confidence = 5;
+  uint64 track_id = 6;
 }
 
 message DetectionResult {
@@ -30,6 +31,7 @@ message DetectionResult {
   uint32 image_height = 6;
   double inference_ms = 7;
   repeated DetectionBox boxes = 8;
+  string tracker_instance_id = 9;
 }
 
 enum CameraState {

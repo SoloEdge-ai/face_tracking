@@ -31,11 +31,13 @@ struct DetectionBox {
   float width{};
   float height{};
   float confidence{};
+  std::uint64_t track_id{};
 };
 
 struct DetectionResult {
   std::uint32_t schema_version{kSchemaVersion};
   std::string source_instance_id;
+  std::string tracker_instance_id;
   std::uint64_t sequence{};
   std::int64_t captured_at_unix_ns{};
   std::uint32_t image_width{};

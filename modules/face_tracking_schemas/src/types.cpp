@@ -21,6 +21,7 @@ void validate(const DetectionResult& result) {
   for (const auto& box : result.boxes) {
     if (!std::isfinite(box.x) || !std::isfinite(box.y) || !std::isfinite(box.width) || !std::isfinite(box.height) || !std::isfinite(box.confidence)) throw std::invalid_argument("detection contains non-finite values");
     if (box.x < 0 || box.y < 0 || box.width <= 0 || box.height <= 0 || box.confidence < 0 || box.confidence > 1 || box.x + box.width > result.image_width || box.y + box.height > result.image_height) throw std::invalid_argument("detection box is invalid");
+    if (box.track_id != 0 && result.tracker_instance_id.empty()) throw std::invalid_argument("tracked detection requires tracker_instance_id");
   }
 }
 

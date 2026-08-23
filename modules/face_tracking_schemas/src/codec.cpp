@@ -70,6 +70,7 @@ std::vector<std::uint8_t> encode(const FrameMetadata& value) {
   wire::FrameMetadata message;
   message.set_schema_version(value.schema_version);
   message.set_source_instance_id(value.source_instance_id);
+  message.set_tracker_instance_id(value.tracker_instance_id);
   message.set_sequence(value.sequence);
   message.set_captured_at_unix_ns(value.captured_at_unix_ns);
   message.set_width(value.width);
@@ -103,15 +104,16 @@ std::vector<std::uint8_t> encode(const DetectionResult& value) {
     output->set_width(box.width);
     output->set_height(box.height);
     output->set_confidence(box.confidence);
+    output->set_track_id(box.track_id);
   }
   return serialize(message);
 }
 
 DetectionResult decode_detection_result(std::span<const std::uint8_t> bytes) {
   const auto message = parse<wire::DetectionResult>(bytes);
-  DetectionResult value{.schema_version = message.schema_version(), .source_instance_id = message.source_instance_id(), .sequence = message.sequence(), .captured_at_unix_ns = message.captured_at_unix_ns(), .image_width = message.image_width(), .image_height = message.image_height(), .inference_ms = message.inference_ms(), .boxes = {}};
+  DetectionResult value{.schema_version = message.schema_version(), .source_instance_id = message.source_instance_id(), .tracker_instance_id = message.tracker_instance_id(), .sequence = message.sequence(), .captured_at_unix_ns = message.captured_at_unix_ns(), .image_width = message.image_width(), .image_height = message.image_height(), .inference_ms = message.inference_ms(), .boxes = {}};
   value.boxes.reserve(message.boxes_size());
-  for (const auto& box : message.boxes()) value.boxes.push_back({box.x(), box.y(), box.width(), box.height(), box.confidence()});
+  for (const auto& box : message.boxes()) value.boxes.push_back({box.x(), box.y(), box.width(), box.height(), box.confidence(), box.track_id()});
   validate(value);
   return value;
 }
