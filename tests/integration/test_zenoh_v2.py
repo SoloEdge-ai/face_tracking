@@ -23,8 +23,10 @@ def test_cpp_publishers_are_python_decodable() -> None:
         "camera": [],
         "detections": [],
         "detector": [],
+        "controller": [],
         "camera_liveliness": [],
         "detector_liveliness": [],
+        "controller_liveliness": [],
     }
     condition = threading.Condition()
 
@@ -63,6 +65,10 @@ def test_cpp_publishers_are_python_decodable() -> None:
             session.declare_subscriber(
                 f"{prefix}/diagnostics/detector", record("detector", wire.DetectorStatus)
             ),
+            session.declare_subscriber(
+                f"{prefix}/diagnostics/pixel_center_controller",
+                record("controller", wire.PixelCenterControllerStatus),
+            ),
             session.liveliness().declare_subscriber(
                 f"{prefix}/liveliness/camera",
                 record_liveliness("camera_liveliness"),
@@ -71,6 +77,11 @@ def test_cpp_publishers_are_python_decodable() -> None:
             session.liveliness().declare_subscriber(
                 f"{prefix}/liveliness/detector",
                 record_liveliness("detector_liveliness"),
+                history=True,
+            ),
+            session.liveliness().declare_subscriber(
+                f"{prefix}/liveliness/pixel_center_controller",
+                record_liveliness("controller_liveliness"),
                 history=True,
             ),
         ]
@@ -86,7 +97,7 @@ def test_cpp_publishers_are_python_decodable() -> None:
             subscriber.undeclare()
 
     assert all(received.values()), {name: len(values) for name, values in received.items()}
-    wire_channels = ("frames", "camera", "detections", "detector")
+    wire_channels = ("frames", "camera", "detections", "detector", "controller")
     assert all(
         message.schema_version == 2
         for name in wire_channels
@@ -106,3 +117,48 @@ def test_cpp_publishers_are_python_decodable() -> None:
             "processed_frames": detector_samples[-1].processed_frames,
             "dropped_frames": detector_samples[-1].dropped_frames,
         }
+
+
+def test_controller_uses_synthetic_target_when_no_real_face_is_present() -> None:
+    import zenoh
+
+    device_id = os.environ.get("FACE_TRACKING_DEVICE_ID", "raspberrypi")
+    prefix = f"face_tracking/{device_id}"
+    commands: list[wire.PanTiltDelta] = []
+    condition = threading.Condition()
+
+    def on_command(sample: object) -> None:
+        with condition:
+            commands.append(wire.PanTiltDelta.FromString(bytes(getattr(sample, "payload"))))
+            condition.notify_all()
+
+    config = zenoh.Config()
+    config.insert_json5("mode", '"client"')
+    config.insert_json5("connect/endpoints", '["tcp/127.0.0.1:7447"]')
+    with zenoh.open(config) as session:
+        subscriber = session.declare_subscriber(f"{prefix}/pan_tilt/delta_cmd", on_command)
+        now = time.time_ns()
+        observation = wire.SelectedTargetObservation(
+            schema_version=2,
+            source_instance_id="synthetic-camera",
+            tracker_instance_id="synthetic-tracker",
+            sequence=100,
+            captured_at_unix_ns=now,
+            selected_track_id=7,
+            target_center_x=740,
+            target_center_y=300,
+            image_width=1280,
+            image_height=720,
+            tracking_state=wire.TRACKING_STATE_TRACKING,
+        )
+        session.put(f"{prefix}/target/selected", observation.SerializeToString())
+        deadline = time.monotonic() + 2
+        with condition:
+            while time.monotonic() < deadline and not commands:
+                condition.wait(deadline - time.monotonic())
+        subscriber.undeclare()
+
+    assert commands
+    assert commands[0].reason == wire.CONTROLLER_DECISION_APPLIED
+    assert commands[0].delta_pan_deg == pytest.approx(1.0)
+    assert commands[0].delta_tilt_deg == pytest.approx(-0.6)

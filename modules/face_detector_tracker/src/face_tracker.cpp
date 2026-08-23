@@ -116,9 +116,10 @@ struct FaceTracker::Implementation {
 };
 
 FaceTracker::FaceTracker(TrackerSettings settings, std::string instance_id)
-    : implementation_(std::make_unique<Implementation>(Implementation{
+      : implementation_(std::make_unique<Implementation>(Implementation{
           .settings = settings,
           .instance_id = instance_id.empty() ? make_instance_id() : std::move(instance_id),
+          .tracks = {},
       })) {}
 
 FaceTracker::~FaceTracker() = default;
