@@ -15,6 +15,7 @@ option(FACE_TRACKING_USE_SYSTEM_OPENCV "Use a compatible system OpenCV instead o
 include(FetchContent)
 
 if(FACE_TRACKING_USE_SYSTEM_OPENCV)
+  find_package(Eigen3 QUIET)
   find_package(OpenCV 4.9 REQUIRED COMPONENTS core imgcodecs imgproc videoio dnn)
 else()
   set(BUILD_LIST core,imgproc,imgcodecs,videoio,dnn CACHE STRING "" FORCE)
