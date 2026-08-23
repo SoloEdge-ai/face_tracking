@@ -61,7 +61,7 @@ def test_cpp_golden_fixtures_decode() -> None:
     assert detector["inference_fps"] == 4.25
     assert detector["last_error"] == "boom"
     assert servo["commanded_pan_deg"] == 135.0
-    assert servo["commanded_tilt_deg"] == 10.0
+    assert servo["commanded_tilt_deg"] == 20.0
     assert servo["decision"] == "HELD_MISSING"
 
     frame_wire = wire.FrameMetadata(

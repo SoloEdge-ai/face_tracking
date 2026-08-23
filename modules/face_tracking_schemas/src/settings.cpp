@@ -42,7 +42,7 @@ ServoAxisSettings load_servo_axis(const YAML::Node& node) {
 void validate_servo_axis(const ServoAxisSettings& axis) {
   if (axis.gpio < 0 || axis.rated_max_deg <= 0 || axis.min_deg < 0 ||
       axis.min_deg >= axis.max_deg || axis.max_deg > axis.rated_max_deg ||
-      axis.home_deg < 0 || axis.home_deg > axis.rated_max_deg || axis.min_pulse_us <= 0 ||
+      axis.home_deg < axis.min_deg || axis.home_deg > axis.max_deg || axis.min_pulse_us <= 0 ||
       axis.min_pulse_us >= axis.max_pulse_us) {
     throw std::runtime_error("invalid servo axis configuration");
   }

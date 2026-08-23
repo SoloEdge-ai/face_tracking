@@ -144,32 +144,23 @@ const PanTiltCommandedState& ServoDriver::process(const PanTiltDelta& command, s
         driver.update_time(now);
         return driver.state;
       }
-      auto apply_delta = [&driver](const ServoAxisSettings& axis, float delta,
-                                   float& commanded_angle, bool& limit_held) {
-        if (delta == 0) {
-          limit_held = false;
-          return false;
-        }
-
-        // Home may intentionally sit outside the tracking range. The first real tracking
-        // command starts from the nearest tracking boundary so that the axis cannot become
-        // permanently stuck outside its operational limits.
-        const float tracking_baseline = std::clamp(commanded_angle, axis.min_deg, axis.max_deg);
-        const float candidate = tracking_baseline + delta;
-        limit_held = candidate < axis.min_deg || candidate > axis.max_deg;
-        const float accepted_angle = limit_held ? tracking_baseline : candidate;
-        if (accepted_angle == commanded_angle) return false;
-
-        driver.write_axis(axis, accepted_angle);
-        commanded_angle = accepted_angle;
-        return true;
-      };
-
+      const float next_pan = driver.state.commanded_pan_deg + command.delta_pan_deg;
+      const float next_tilt = driver.state.commanded_tilt_deg + command.delta_tilt_deg;
+      driver.state.pan_limit_held =
+          next_pan < driver.settings.pan.min_deg || next_pan > driver.settings.pan.max_deg;
+      driver.state.tilt_limit_held =
+          next_tilt < driver.settings.tilt.min_deg || next_tilt > driver.settings.tilt.max_deg;
       bool changed = false;
-      changed |= apply_delta(driver.settings.pan, command.delta_pan_deg,
-                             driver.state.commanded_pan_deg, driver.state.pan_limit_held);
-      changed |= apply_delta(driver.settings.tilt, command.delta_tilt_deg,
-                             driver.state.commanded_tilt_deg, driver.state.tilt_limit_held);
+      if (!driver.state.pan_limit_held && command.delta_pan_deg != 0) {
+        driver.write_axis(driver.settings.pan, next_pan);
+        driver.state.commanded_pan_deg = next_pan;
+        changed = true;
+      }
+      if (!driver.state.tilt_limit_held && command.delta_tilt_deg != 0) {
+        driver.write_axis(driver.settings.tilt, next_tilt);
+        driver.state.commanded_tilt_deg = next_tilt;
+        changed = true;
+      }
       if (changed) ++driver.state.applied_commands;
       if (driver.state.pan_limit_held || driver.state.tilt_limit_held) {
         ++driver.state.rejected_commands;
