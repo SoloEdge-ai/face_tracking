@@ -46,13 +46,16 @@ CameraProcessSettings load_camera_process_settings(const std::filesystem::path& 
 DetectorProcessSettings load_detector_process_settings(const std::filesystem::path& path) {
   const auto root = YAML::LoadFile(path.string());
   const auto detector = root["detector"];
+  const auto tracker = detector["tracker"];
   DetectorProcessSettings settings{
       .transport = load_transport(root),
-      .detector = {.model_path = required<std::string>(detector, "model_path"), .inference_hz = required<int>(detector, "inference_hz"), .image_size = required<int>(detector, "image_size"), .confidence = required<float>(detector, "confidence"), .iou = required<float>(detector, "iou")},
+      .detector = {.model_path = required<std::string>(detector, "model_path"), .inference_hz = required<int>(detector, "inference_hz"), .image_size = required<int>(detector, "image_size"), .confidence = required<float>(detector, "confidence"), .iou = required<float>(detector, "iou"), .tracker = {.retention_ms = required<int>(tracker, "retention_ms"), .min_match_iou = required<float>(tracker, "min_match_iou"), .max_center_distance_ratio = required<float>(tracker, "max_center_distance_ratio")}},
   };
   if (settings.detector.model_path.empty() || settings.detector.inference_hz <= 0 ||
       settings.detector.image_size <= 0 || settings.detector.confidence < 0 ||
-      settings.detector.confidence > 1 || settings.detector.iou < 0 || settings.detector.iou > 1) {
+      settings.detector.confidence > 1 || settings.detector.iou < 0 || settings.detector.iou > 1 ||
+      settings.detector.tracker.retention_ms <= 0 || settings.detector.tracker.min_match_iou < 0 ||
+      settings.detector.tracker.min_match_iou > 1 || settings.detector.tracker.max_center_distance_ratio <= 0) {
     throw std::runtime_error("invalid detector configuration");
   }
   return settings;

@@ -31,8 +31,9 @@ std::uint64_t internal::LatestFrameSlot::dropped_frames() const {
   return dropped_frames_;
 }
 
-internal::DetectorLoop::DetectorLoop(TransportPort& transport, InferenceEngine& engine, int inference_hz)
-    : transport_(transport), engine_(engine), inference_hz_(inference_hz) {}
+internal::DetectorLoop::DetectorLoop(
+    TransportPort& transport, InferenceEngine& engine, int inference_hz, TrackerSettings tracker_settings)
+    : transport_(transport), engine_(engine), inference_hz_(inference_hz), tracker_(tracker_settings) {}
 
 bool internal::DetectorLoop::due(std::chrono::steady_clock::time_point now) const { return now >= next_inference_at_; }
 
@@ -49,9 +50,10 @@ bool internal::DetectorLoop::process_if_due(const std::optional<FrameEvent>& fra
     return false;
   }
   const auto started = std::chrono::steady_clock::now();
-  auto boxes = engine_.infer(image);
+  const auto raw_boxes = engine_.infer(image);
+  auto boxes = tracker_.update(raw_boxes, frame->metadata.captured_at_unix_ns);
   const auto inference_ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started).count();
-  DetectionResult result{.source_instance_id = frame->metadata.source_instance_id, .sequence = frame->metadata.sequence, .captured_at_unix_ns = frame->metadata.captured_at_unix_ns, .image_width = frame->metadata.width, .image_height = frame->metadata.height, .inference_ms = inference_ms, .boxes = std::move(boxes)};
+  DetectionResult result{.source_instance_id = frame->metadata.source_instance_id, .tracker_instance_id = tracker_.instance_id(), .sequence = frame->metadata.sequence, .captured_at_unix_ns = frame->metadata.captured_at_unix_ns, .image_width = frame->metadata.width, .image_height = frame->metadata.height, .inference_ms = inference_ms, .boxes = std::move(boxes)};
   validate(result);
   transport_.publish_detection(result);
   last_processed_key_ = key;
@@ -67,7 +69,7 @@ struct DetectorService::Implementation {
       : settings(std::move(value)),
         transport(transport),
         engine(std::make_unique<internal::OpenCvYoloEngine>(settings)),
-        loop(transport, *engine, settings.inference_hz) {}
+        loop(transport, *engine, settings.inference_hz, settings.tracker) {}
 
   void publish_status(std::chrono::steady_clock::time_point now, bool force = false);
   void run(std::stop_token stop_token);

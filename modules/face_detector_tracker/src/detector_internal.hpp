@@ -9,6 +9,7 @@
 #include <opencv2/core/mat.hpp>
 
 #include "face_tracking/detector/detector_service.hpp"
+#include "face_tracking/detector/face_tracker.hpp"
 
 namespace face_tracking::detector::internal {
 
@@ -33,7 +34,8 @@ class LatestFrameSlot {
 
 class DetectorLoop {
  public:
-  DetectorLoop(TransportPort& transport, InferenceEngine& engine, int inference_hz);
+  DetectorLoop(TransportPort& transport, InferenceEngine& engine, int inference_hz,
+               TrackerSettings tracker_settings = {});
   [[nodiscard]] bool due(std::chrono::steady_clock::time_point now) const;
   bool process_if_due(const std::optional<FrameEvent>& frame, std::chrono::steady_clock::time_point now);
   [[nodiscard]] std::uint64_t processed_frames() const;
@@ -43,6 +45,7 @@ class DetectorLoop {
   TransportPort& transport_;
   InferenceEngine& engine_;
   int inference_hz_;
+  FaceTracker tracker_;
   std::chrono::steady_clock::time_point next_inference_at_{};
   std::optional<std::pair<std::string, std::uint64_t>> last_processed_key_;
   std::uint64_t processed_frames_{};

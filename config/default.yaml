@@ -21,6 +21,20 @@ detector:
   image_size: 640
   confidence: 0.50
   iou: 0.45
+  tracker:
+    retention_ms: 1000
+    min_match_iou: 0.10
+    max_center_distance_ratio: 1.0
+
+controller:
+  control_rate_hz: 20
+  deadband_x_px: 30
+  deadband_y_px: 24
+  kp_pan_deg_per_px: 0.01
+  kp_tilt_deg_per_px: 0.01
+  max_pan_step_deg: 1.5
+  max_tilt_step_deg: 1.0
+  observation_timeout_ms: 200
 
 hmi:
   host: 0.0.0.0

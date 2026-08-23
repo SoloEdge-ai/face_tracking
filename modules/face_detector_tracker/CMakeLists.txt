@@ -1,4 +1,4 @@
-add_library(face_detector_tracker src/detector_service.cpp src/opencv_yolo.cpp)
+add_library(face_detector_tracker src/detector_service.cpp src/face_tracker.cpp src/opencv_yolo.cpp)
 add_library(face_tracking::detector ALIAS face_detector_tracker)
 target_include_directories(face_detector_tracker
   PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include

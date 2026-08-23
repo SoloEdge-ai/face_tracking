@@ -23,12 +23,19 @@ struct CameraSettings {
   double reconnect_seconds{};
 };
 
+struct TrackerSettings {
+  int retention_ms{1000};
+  float min_match_iou{0.1F};
+  float max_center_distance_ratio{1.0F};
+};
+
 struct DetectorSettings {
   std::string model_path;
   int inference_hz{};
   int image_size{};
   float confidence{};
   float iou{};
+  TrackerSettings tracker;
 };
 
 struct HmiSettings {
