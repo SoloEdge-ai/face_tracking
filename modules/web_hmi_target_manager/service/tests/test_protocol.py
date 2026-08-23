@@ -108,7 +108,7 @@ def test_cpp_golden_fixtures_decode() -> None:
         schema_version=2,
         updated_at_unix_ns=2_300_000_000,
         commanded_pan_deg=135.0,
-        commanded_tilt_deg=10.0,
+        commanded_tilt_deg=20.0,
         last_track_id=42,
         state=wire.SERVO_DRIVER_STATE_HOLDING,
         decision=wire.SERVO_DECISION_HELD_MISSING,
