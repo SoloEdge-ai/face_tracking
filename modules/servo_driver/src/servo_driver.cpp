@@ -195,10 +195,14 @@ const PanTiltCommandedState& ServoDriver::process(const PanTiltDelta& command, s
               ? 0.0F
               : std::min(std::abs(command.delta_tilt_deg) / interval_s,
                          driver.settings.tilt_max_velocity_deg_per_s);
+      const float pan_alpha =
+          pan_desired < driver.pan_velocity_deg_per_s ? 0.9F : 0.6F;
+      const float tilt_alpha =
+          tilt_desired < driver.tilt_velocity_deg_per_s ? 0.9F : 0.6F;
       driver.pan_velocity_deg_per_s =
-          0.7F * pan_desired + 0.3F * driver.pan_velocity_deg_per_s;
+          pan_alpha * pan_desired + (1.0F - pan_alpha) * driver.pan_velocity_deg_per_s;
       driver.tilt_velocity_deg_per_s =
-          0.7F * tilt_desired + 0.3F * driver.tilt_velocity_deg_per_s;
+          tilt_alpha * tilt_desired + (1.0F - tilt_alpha) * driver.tilt_velocity_deg_per_s;
       bool changed = false;
       if (!driver.state.pan_limit_held && command.delta_pan_deg != 0) {
         driver.state.commanded_pan_deg = next_pan;
@@ -221,15 +225,15 @@ const PanTiltCommandedState& ServoDriver::process(const PanTiltDelta& command, s
     }
     case ControllerDecision::deadband:
       driver.last_upstream_at_unix_ns = now;
-      driver.pan_velocity_deg_per_s *= 0.5F;
-      driver.tilt_velocity_deg_per_s *= 0.5F;
+      driver.pan_velocity_deg_per_s *= 0.2F;
+      driver.tilt_velocity_deg_per_s *= 0.2F;
       driver.state.decision = ServoDecision::held_deadband;
       driver.state.state = ServoDriverState::holding;
       break;
     case ControllerDecision::missing_hold:
       driver.last_upstream_at_unix_ns = now;
-      driver.pan_velocity_deg_per_s *= 0.5F;
-      driver.tilt_velocity_deg_per_s *= 0.5F;
+      driver.pan_velocity_deg_per_s *= 0.2F;
+      driver.tilt_velocity_deg_per_s *= 0.2F;
       driver.state.decision = ServoDecision::held_missing;
       driver.state.state = ServoDriverState::holding;
       break;

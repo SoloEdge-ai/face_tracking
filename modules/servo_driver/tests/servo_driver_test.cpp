@@ -318,6 +318,42 @@ TEST(ServoDriver, FollowsCommandedVelocityContinuouslyBetweenCommands) {
   EXPECT_NEAR(last_angle, 145.0F, 1.5F);
 }
 
+TEST(ServoDriver, BrakesQuicklyOnDeadbandToAvoidOvershoot) {
+  FakePwm pwm;
+  face_tracking::servo::ServoDriver driver(settings(), pwm);
+  driver.start(1'100'000'000);
+  std::int64_t now = 1'100'000'000;
+
+  auto apply = [&](float pan, float tilt, face_tracking::ControllerDecision reason,
+                   std::uint64_t sequence) {
+    auto cmd = command(pan, tilt, reason, sequence);
+    cmd.captured_at_unix_ns = now;
+    cmd.computed_at_unix_ns = now;
+    driver.process(cmd, now);
+  };
+
+  apply(1, 0, face_tracking::ControllerDecision::applied, 1);
+  for (int tick = 0; tick < 5; ++tick) {
+    now += 20'000'000;
+    driver.advance(now);
+  }
+  const auto before_brake = pwm.pulses.size();
+  EXPECT_GT(before_brake, 2U);
+
+  for (std::uint64_t sequence = 2; sequence <= 6; ++sequence) {
+    apply(0, 0, face_tracking::ControllerDecision::deadband, sequence);
+    now += 20'000'000;
+    driver.advance(now);
+  }
+  const auto after_brake = pwm.pulses.size();
+  for (int tick = 0; tick < 3; ++tick) {
+    now += 20'000'000;
+    driver.advance(now);
+  }
+  EXPECT_EQ(pwm.pulses.size(), after_brake);
+  EXPECT_GT(after_brake, before_brake);
+}
+
 TEST(ServoDriver, LostWithInvalidDeltaStillReturnsHome) {
   FakePwm pwm;
   face_tracking::servo::ServoDriver driver(settings(), pwm);

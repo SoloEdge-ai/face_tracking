@@ -37,7 +37,7 @@ controller:
   reverse_pan_output: true
   reverse_tilt_output: true
   observation_timeout_ms: 600
-  error_smoothing: 0.6
+  error_smoothing: 0.7
 
 servo:
   pwm_chip: 0
