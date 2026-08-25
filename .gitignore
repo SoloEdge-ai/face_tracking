@@ -12,3 +12,5 @@ modules/web_hmi_target_manager/web/*.tsbuildinfo
 modules/web_hmi_target_manager/web/vite.config.js
 modules/web_hmi_target_manager/web/vite.config.d.ts
 *.log
+.deps
+.npmrc
