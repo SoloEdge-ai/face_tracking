@@ -42,6 +42,9 @@ struct ServoDriver::Implementation {
   float output_pan_deg{};
   float output_tilt_deg{};
   std::int64_t last_advance_at_unix_ns{};
+  float pan_velocity_deg_per_s{};
+  float tilt_velocity_deg_per_s{};
+  std::int64_t last_command_at_unix_ns{};
 
   void write_axis(const ServoAxisSettings& axis, float angle) {
     pwm.set_pulse(axis.gpio, pulse_for(axis, angle), settings.frequency_hz);
@@ -65,6 +68,9 @@ struct ServoDriver::Implementation {
     write_axis(settings.tilt, settings.tilt.home_deg);
     output_pan_deg = settings.pan.home_deg;
     output_tilt_deg = settings.tilt.home_deg;
+    pan_velocity_deg_per_s = 0;
+    tilt_velocity_deg_per_s = 0;
+    last_command_at_unix_ns = 0;
     state.commanded_pan_deg = settings.pan.home_deg;
     state.commanded_tilt_deg = settings.tilt.home_deg;
     state.state = ServoDriverState::holding;
@@ -173,6 +179,26 @@ const PanTiltCommandedState& ServoDriver::process(const PanTiltDelta& command, s
           next_pan < driver.settings.pan.min_deg || next_pan > driver.settings.pan.max_deg;
       driver.state.tilt_limit_held =
           next_tilt < driver.settings.tilt.min_deg || next_tilt > driver.settings.tilt.max_deg;
+      const float interval_s =
+          driver.last_command_at_unix_ns <= 0
+              ? 0.2F
+              : static_cast<float>(std::clamp(
+                    (now - driver.last_command_at_unix_ns) / 1'000'000'000.0, 0.05, 1.0));
+      driver.last_command_at_unix_ns = now;
+      const float pan_desired =
+          driver.state.pan_limit_held
+              ? 0.0F
+              : std::min(std::abs(command.delta_pan_deg) / interval_s,
+                         driver.settings.pan_max_velocity_deg_per_s);
+      const float tilt_desired =
+          driver.state.tilt_limit_held
+              ? 0.0F
+              : std::min(std::abs(command.delta_tilt_deg) / interval_s,
+                         driver.settings.tilt_max_velocity_deg_per_s);
+      driver.pan_velocity_deg_per_s =
+          0.7F * pan_desired + 0.3F * driver.pan_velocity_deg_per_s;
+      driver.tilt_velocity_deg_per_s =
+          0.7F * tilt_desired + 0.3F * driver.tilt_velocity_deg_per_s;
       bool changed = false;
       if (!driver.state.pan_limit_held && command.delta_pan_deg != 0) {
         driver.state.commanded_pan_deg = next_pan;
@@ -195,11 +221,15 @@ const PanTiltCommandedState& ServoDriver::process(const PanTiltDelta& command, s
     }
     case ControllerDecision::deadband:
       driver.last_upstream_at_unix_ns = now;
+      driver.pan_velocity_deg_per_s *= 0.5F;
+      driver.tilt_velocity_deg_per_s *= 0.5F;
       driver.state.decision = ServoDecision::held_deadband;
       driver.state.state = ServoDriverState::holding;
       break;
     case ControllerDecision::missing_hold:
       driver.last_upstream_at_unix_ns = now;
+      driver.pan_velocity_deg_per_s *= 0.5F;
+      driver.tilt_velocity_deg_per_s *= 0.5F;
       driver.state.decision = ServoDecision::held_missing;
       driver.state.state = ServoDriverState::holding;
       break;
@@ -252,26 +282,24 @@ bool ServoDriver::advance(std::int64_t now) {
       100.0, std::max(0.0, (now - driver.last_advance_at_unix_ns) / 1'000'000.0));
   driver.last_advance_at_unix_ns = now;
   if (dt_ms <= 0) return false;
-  const auto step_axis = [&driver, dt_ms](const ServoAxisSettings& axis, float& current,
-                                          float target, float max_velocity) {
+  const auto step_axis = [&driver, dt_ms](float& current, float target, float velocity) {
     const float delta = target - current;
     if (delta == 0.0F) return false;
-    const float max_step = max_velocity * static_cast<float>(dt_ms) / 1000.0F;
+    const float max_step = velocity * static_cast<float>(dt_ms) / 1000.0F;
+    if (max_step <= 0.0001F) return false;
     const float step = std::clamp(delta, -max_step, max_step);
     if (std::abs(step) < 0.001F) return false;
     current += step;
     return true;
   };
   bool moved = false;
-  if (step_axis(driver.settings.pan, driver.output_pan_deg,
-                driver.state.commanded_pan_deg,
-                driver.settings.pan_max_velocity_deg_per_s)) {
+  if (step_axis(driver.output_pan_deg, driver.state.commanded_pan_deg,
+                driver.pan_velocity_deg_per_s)) {
     driver.write_axis(driver.settings.pan, driver.output_pan_deg);
     moved = true;
   }
-  if (step_axis(driver.settings.tilt, driver.output_tilt_deg,
-                driver.state.commanded_tilt_deg,
-                driver.settings.tilt_max_velocity_deg_per_s)) {
+  if (step_axis(driver.output_tilt_deg, driver.state.commanded_tilt_deg,
+                driver.tilt_velocity_deg_per_s)) {
     driver.write_axis(driver.settings.tilt, driver.output_tilt_deg);
     moved = true;
   }

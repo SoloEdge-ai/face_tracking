@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <chrono>
 #include <condition_variable>
 #include <mutex>
@@ -272,14 +273,49 @@ TEST(ServoDriver, RampsOutputTowardCommandedTargetAtBoundedVelocity) {
   EXPECT_FLOAT_EQ(driver.state().commanded_pan_deg, 136);
   EXPECT_FLOAT_EQ(driver.state().commanded_tilt_deg, 21);
 
-  driver.advance(1'100'000'101);
-  ASSERT_EQ(pwm.pulses.size(), pulses_after_start + 2);
-  EXPECT_EQ(pwm.pulses[pulses_after_start], std::make_tuple(18, 1507, 50));
-  EXPECT_EQ(pwm.pulses[pulses_after_start + 1], std::make_tuple(19, 733, 50));
+  std::int64_t now = 1'100'000'101;
+  for (int tick = 0; tick < 6; ++tick) {
+    driver.advance(now);
+    now += 100'000'000;
+  }
+  ASSERT_GE(pwm.pulses.size(), pulses_after_start + 2);
+  EXPECT_EQ(pwm.pulses[pwm.pulses.size() - 2], std::make_tuple(18, 1507, 50));
+  EXPECT_EQ(pwm.pulses[pwm.pulses.size() - 1], std::make_tuple(19, 733, 50));
 
   const auto pulses_after_reach = pwm.pulses.size();
-  driver.advance(1'100'000'121);
+  driver.advance(now);
   EXPECT_EQ(pwm.pulses.size(), pulses_after_reach);
+}
+
+TEST(ServoDriver, FollowsCommandedVelocityContinuouslyBetweenCommands) {
+  auto fast = settings();
+  fast.pan_max_velocity_deg_per_s = 15.0F;
+  FakePwm pwm;
+  face_tracking::servo::ServoDriver driver(fast, pwm);
+  driver.start(1'000'000'000);
+  const auto pulses_after_start = pwm.pulses.size();
+
+  std::int64_t now = 1'100'000'000;
+  for (std::uint64_t sequence = 1; sequence <= 10; ++sequence) {
+    auto cmd = command(1, 0, face_tracking::ControllerDecision::applied, sequence);
+    cmd.captured_at_unix_ns = now;
+    cmd.computed_at_unix_ns = now;
+    driver.process(cmd, now);
+    for (int tick = 0; tick < 10; ++tick) {
+      now += 20'000'000;
+      driver.advance(now);
+    }
+  }
+
+  const std::size_t pan_pulses = std::count_if(
+      pwm.pulses.begin(), pwm.pulses.end(),
+      [](const auto& pulse) { return std::get<0>(pulse) == 18; });
+  EXPECT_GT(pan_pulses, 5U);
+  EXPECT_GT(pwm.pulses.size(), pulses_after_start + 5U);
+
+  const int last_pulse_us = std::get<1>(pwm.pulses.back());
+  const float last_angle = (last_pulse_us - 500) * 270.0F / 2000.0F;
+  EXPECT_NEAR(last_angle, 145.0F, 1.5F);
 }
 
 TEST(ServoDriver, LostWithInvalidDeltaStillReturnsHome) {
