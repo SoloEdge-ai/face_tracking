@@ -56,6 +56,7 @@ struct PixelCenterControllerSettings {
   bool reverse_pan_output{};
   bool reverse_tilt_output{};
   int observation_timeout_ms{};
+  float error_smoothing{1.0F};
 };
 
 struct ServoAxisSettings {

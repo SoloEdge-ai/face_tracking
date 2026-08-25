@@ -139,3 +139,24 @@ TEST(PixelCenterController, AllowsSwitchingTargetsWithinTheSameDetectionFrame) {
   EXPECT_EQ(switched->reason, face_tracking::ControllerDecision::duplicate);
   EXPECT_EQ(switched->selected_track_id, 8U);
 }
+
+TEST(PixelCenterController, SmoothesErrorAcrossObservationsForTheSameTarget) {
+  auto smooth = settings();
+  smooth.error_smoothing = 0.5F;
+  face_tracking::controller::PixelCenterController controller(smooth);
+
+  const auto first = controller.process(observation(740, 300), 1'100'000'000);
+  ASSERT_TRUE(first);
+  EXPECT_FLOAT_EQ(first->delta_pan_deg, 1.0F);
+  EXPECT_FLOAT_EQ(first->delta_tilt_deg, -0.6F);
+
+  const auto second = controller.process(observation(800, 360, 2), 1'100'000'001);
+  ASSERT_TRUE(second);
+  EXPECT_FLOAT_EQ(second->delta_pan_deg, 1.3F);
+  EXPECT_FLOAT_EQ(second->delta_tilt_deg, -0.3F);
+
+  const auto switched = controller.process(observation(740, 300, 3, 8), 1'100'000'002);
+  ASSERT_TRUE(switched);
+  EXPECT_FLOAT_EQ(switched->delta_pan_deg, 1.0F);
+  EXPECT_FLOAT_EQ(switched->delta_tilt_deg, -0.6F);
+}

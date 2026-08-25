@@ -37,6 +37,9 @@ struct PixelCenterController::Implementation {
       last_observation_key;
   std::optional<std::tuple<std::string, std::string, std::uint64_t>> last_image_key;
   bool stale_emitted{true};
+  std::optional<std::tuple<std::string, std::string, std::uint64_t>> smoothing_key;
+  std::optional<float> smoothed_error_x;
+  std::optional<float> smoothed_error_y;
 };
 
 PixelCenterController::PixelCenterController(PixelCenterControllerSettings settings)
@@ -120,8 +123,24 @@ std::optional<PanTiltDelta> PixelCenterController::process(
   }
   state.last_image_key = image_key;
 
-  const float error_x = observation.target_center_x - observation.image_width / 2.0F;
-  const float error_y = observation.target_center_y - observation.image_height / 2.0F;
+  const float raw_error_x = observation.target_center_x - observation.image_width / 2.0F;
+  const float raw_error_y = observation.target_center_y - observation.image_height / 2.0F;
+  const auto smoothing_key = std::tuple{
+      observation.source_instance_id, observation.tracker_instance_id,
+      observation.selected_track_id};
+  float error_x = raw_error_x;
+  float error_y = raw_error_y;
+  if (!state.smoothing_key || *state.smoothing_key != smoothing_key) {
+    state.smoothing_key = smoothing_key;
+    state.smoothed_error_x = raw_error_x;
+    state.smoothed_error_y = raw_error_y;
+  } else {
+    const float alpha = state.settings.error_smoothing;
+    error_x = alpha * raw_error_x + (1.0F - alpha) * *state.smoothed_error_x;
+    error_y = alpha * raw_error_y + (1.0F - alpha) * *state.smoothed_error_y;
+    state.smoothed_error_x = error_x;
+    state.smoothed_error_y = error_y;
+  }
   const float pan_direction = state.settings.reverse_pan_output ? -1.0F : 1.0F;
   const float tilt_direction = state.settings.reverse_tilt_output ? -1.0F : 1.0F;
   const float pan = std::abs(error_x) <= state.settings.deadband_x_px

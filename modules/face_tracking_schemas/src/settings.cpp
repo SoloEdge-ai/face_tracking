@@ -12,6 +12,12 @@ T required(const YAML::Node& node, const char* key) {
   return node[key].as<T>();
 }
 
+template <typename T>
+T optional_or(const YAML::Node& node, const char* key, T fallback) {
+  if (!node[key]) return fallback;
+  return node[key].as<T>();
+}
+
 TransportSettings load_transport(const YAML::Node& root) {
   const auto common = root["common"];
   const auto middleware = root["middleware"];
@@ -99,12 +105,14 @@ ControllerProcessSettings load_controller_process_settings(const std::filesystem
           .reverse_pan_output = required<bool>(controller, "reverse_pan_output"),
           .reverse_tilt_output = required<bool>(controller, "reverse_tilt_output"),
           .observation_timeout_ms = required<int>(controller, "observation_timeout_ms"),
+          .error_smoothing = optional_or(controller, "error_smoothing", 1.0F),
       },
   };
   const auto& value = settings.controller;
   if (value.control_rate_hz <= 0 || value.deadband_x_px < 0 || value.deadband_y_px < 0 ||
       value.kp_pan_deg_per_px < 0 || value.kp_tilt_deg_per_px < 0 ||
-      value.max_pan_step_deg <= 0 || value.max_tilt_step_deg <= 0 || value.observation_timeout_ms <= 0) {
+      value.max_pan_step_deg <= 0 || value.max_tilt_step_deg <= 0 || value.observation_timeout_ms <= 0 ||
+      value.error_smoothing <= 0 || value.error_smoothing > 1.0F) {
     throw std::runtime_error("invalid pixel center controller configuration");
   }
   return settings;
