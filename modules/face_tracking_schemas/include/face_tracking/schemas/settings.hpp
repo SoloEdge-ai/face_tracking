@@ -80,6 +80,8 @@ struct ServoDriverSettings {
   bool tracking_enabled{};
   ServoAxisSettings pan;
   ServoAxisSettings tilt;
+  float pan_max_velocity_deg_per_s{15.0F};
+  float tilt_max_velocity_deg_per_s{10.0F};
 };
 
 struct TransportSettings {

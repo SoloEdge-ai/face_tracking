@@ -33,6 +33,7 @@ class ServoDriver {
   void note_upstream_online(std::int64_t now_unix_ns);
   const PanTiltCommandedState& upstream_lost(std::int64_t now_unix_ns);
   bool check_timeout(std::int64_t now_unix_ns);
+  bool advance(std::int64_t now_unix_ns);
   const PanTiltCommandedState& stop(std::int64_t now_unix_ns) noexcept;
   const PanTiltCommandedState& fail(std::string error, std::int64_t now_unix_ns) noexcept;
   [[nodiscard]] const PanTiltCommandedState& state() const;

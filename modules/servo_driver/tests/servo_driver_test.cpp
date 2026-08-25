@@ -260,6 +260,28 @@ TEST(ServoDriver, RejectsDeltaBeyondDriverInputLimit) {
   EXPECT_EQ(state.rejected_commands, 1U);
 }
 
+TEST(ServoDriver, RampsOutputTowardCommandedTargetAtBoundedVelocity) {
+  FakePwm pwm;
+  face_tracking::servo::ServoDriver driver(settings(), pwm);
+  driver.start(1'100'000'000);
+  const auto pulses_after_start = pwm.pulses.size();
+
+  driver.process(command(1, 1, face_tracking::ControllerDecision::applied),
+                 1'100'000'001);
+  EXPECT_EQ(pwm.pulses.size(), pulses_after_start);
+  EXPECT_FLOAT_EQ(driver.state().commanded_pan_deg, 136);
+  EXPECT_FLOAT_EQ(driver.state().commanded_tilt_deg, 21);
+
+  driver.advance(1'100'000'101);
+  ASSERT_EQ(pwm.pulses.size(), pulses_after_start + 2);
+  EXPECT_EQ(pwm.pulses[pulses_after_start], std::make_tuple(18, 1507, 50));
+  EXPECT_EQ(pwm.pulses[pulses_after_start + 1], std::make_tuple(19, 733, 50));
+
+  const auto pulses_after_reach = pwm.pulses.size();
+  driver.advance(1'100'000'121);
+  EXPECT_EQ(pwm.pulses.size(), pulses_after_reach);
+}
+
 TEST(ServoDriver, LostWithInvalidDeltaStillReturnsHome) {
   FakePwm pwm;
   face_tracking::servo::ServoDriver driver(settings(), pwm);

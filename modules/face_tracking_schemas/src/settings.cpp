@@ -133,6 +133,10 @@ ServoProcessSettings load_servo_process_settings(const std::filesystem::path& pa
           .tracking_enabled = required<bool>(servo, "tracking_enabled"),
           .pan = load_servo_axis(servo["pan"]),
           .tilt = load_servo_axis(servo["tilt"]),
+          .pan_max_velocity_deg_per_s =
+              optional_or(servo, "pan_max_velocity_deg_per_s", 15.0F),
+          .tilt_max_velocity_deg_per_s =
+              optional_or(servo, "tilt_max_velocity_deg_per_s", 10.0F),
       },
   };
   validate_servo_axis(settings.servo.pan);
@@ -145,6 +149,8 @@ ServoProcessSettings load_servo_process_settings(const std::filesystem::path& pa
       settings.servo.command_max_age_ms <= 0 || settings.servo.upstream_timeout_ms <= 0 ||
       settings.servo.max_input_pan_delta_deg <= 0 ||
       settings.servo.max_input_tilt_delta_deg <= 0 ||
+      settings.servo.pan_max_velocity_deg_per_s <= 0 ||
+      settings.servo.tilt_max_velocity_deg_per_s <= 0 ||
       settings.servo.pan.gpio == settings.servo.tilt.gpio ||
       !pulse_fits_period(settings.servo.pan) || !pulse_fits_period(settings.servo.tilt)) {
     throw std::runtime_error("invalid servo driver configuration");

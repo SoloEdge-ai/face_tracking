@@ -77,6 +77,7 @@ int main(int argc, char** argv) {
           .reason = face_tracking::ControllerDecision::applied,
       };
       const auto& state = driver.process(command, now);
+      driver.advance(now);
       if (++log_counter % 10 == 0) {
         std::cout << "Pan " << state.commanded_pan_deg << " deg, Tilt "
                   << state.commanded_tilt_deg << " deg\n";
